@@ -3,10 +3,10 @@ import numpy as np
 from scipy.io import loadmat
 import pickle
 
-from states import NominalState
+from eskf.src.rov_states import NominalState
 from senfuslib import TimeSequence
 from quaternion import RotationQuaterion
-from states import NominalState, ImuMeasurement, GnssMeasurement
+from eskf.src.rov_states import NominalState, ImuMeasurement, GnssMeasurement
 from config import fname_data_sim, fname_data_real, cache_dir
 
 

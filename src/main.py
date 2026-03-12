@@ -2,7 +2,7 @@ from tqdm import tqdm
 from matplotlib import pyplot as plt
 
 from utils.dataloader import load_data
-from states import EskfState, ImuMeasurement, GnssMeasurement
+from eskf.src.rov_states import EskfState, ImuMeasurement, GnssMeasurement
 from senfuslib import MultiVarGauss, TimeSequence
 from eskf import ESKF
 from plotting import PlotterESKF
