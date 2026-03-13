@@ -6,7 +6,7 @@ from asv_states import ASVState, RangeMeasurement, UsblMeasurement
 from eskf import ESKF_cv, ESKF_imu
 from rov_states import DepthMeasurement, EskfState, ImuMeasurement, NominalState
 from senfuslib import MultiVarGauss, TimeSequence
-from plotting import PlotterESKF
+from utils.plotting import PlotterESKF
 
 from tuning_sim import (eskf_sim, rov_est_init_sim,
                         start_time_sim, end_time_sim,
@@ -116,13 +116,13 @@ def main():
     # )
 
     # 3. Run scenarios — comment/uncomment as needed
-    print("Running Scenario 1: USBL bearing only, CV model")
-    upd_s1, pred_s1 = run_eskf_s1(
-        eskf=eskf_sim,
-        rov_est_init=rov_est_init_sim,
-        asv_state_tseq=asv_tseq,
-        z_usbl_tseq=z_usbl_tseq,
-    )
+    # print("Running Scenario 1: USBL bearing only, CV model")
+    # upd_s1, pred_s1 = run_eskf_s1(
+    #     eskf=eskf_sim,
+    #     rov_est_init=rov_est_init_sim,
+    #     asv_state_tseq=asv_tseq,
+    #     z_usbl_tseq=z_usbl_tseq,
+    # )
 
     print("Running Scenario 2: USBL bearing + range, CV model")
     upd_s2, pred_s2 = run_eskf_s2(
@@ -133,23 +133,28 @@ def main():
         z_range_tseq=z_range_tseq,
     )
 
-    print("Running Scenario 3: USBL bearing + range + depth, CV model")
-    upd_s3, pred_s3 = run_eskf_s3(
-        eskf=eskf_sim,
-        rov_est_init=rov_est_init_sim,
-        asv_state_tseq=asv_tseq,
-        z_usbl_tseq=z_usbl_tseq,
-        z_range_tseq=z_range_tseq,
-        z_depth_tseq=z_depth_tseq,
-    )
+    # print("Running Scenario 3: USBL bearing + range + depth, CV model")
+    # upd_s3, pred_s3 = run_eskf_s3(
+    #     eskf=eskf_sim,
+    #     rov_est_init=rov_est_init_sim,
+    #     asv_state_tseq=asv_tseq,
+    #     z_usbl_tseq=z_usbl_tseq,
+    #     z_range_tseq=z_range_tseq,
+    #     z_depth_tseq=z_depth_tseq,
+    # )
 
     # 4. Plot — adapt to your PlotterESKF interface
-    # PlotterESKF(
-    #     x_gts=rov_gt_tseq,
-    #     x_upds=upd_s3,
-    #     x_preds=pred_s3,
-    # ).show()
-    # plt.show(block=True)
+    PlotterESKF(
+        rov_gt=rov_gt_tseq,
+        asv_gt=asv_tseq,
+        rov_upds=upd_s2,
+        rov_preds=pred_s2,
+        z_usbl=z_usbl_tseq,
+        z_range=z_range_tseq,
+        z_depth=z_depth_tseq,
+        scenario_name="Scenario 2: Bearing + Range (CV)",
+        save_dir="plots/scenario2",
+    ).show()
 
 if __name__ == '__main__':
     main()
