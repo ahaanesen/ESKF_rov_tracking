@@ -1,10 +1,9 @@
-from eskf import ESKF
-from eskf.src.eskf import ESKF_cv
+from eskf import ESKF_cv
 from models import ModelIMU, ModelCV
-from eskf.src.rov_sensors import SensorDepth
-from eskf.src.asv_sensors import SensorRange, SensorUSBL
-from eskf.src.rov_states import EskfState, NominalState, ErrorState, RotationQuaterion
-from eskf.src.asv_states import ASVState
+from rov_sensors import SensorDepth
+from asv_sensors import SensorRange, SensorUSBL
+from rov_states import EskfState, NominalState, ErrorState, RotationQuaterion
+from asv_states import ASVState
 
 from utils.dataloader import load_drone_params
 from senfuslib import MultiVarGauss
@@ -12,7 +11,7 @@ import numpy as np
 from config import fname_data_sim, fname_data_real
 
 accm_corr, gyro_corr, imu_lever_arm = load_drone_params(fname_data_sim)
-usbl_lever_arm = np.array([0, 0, -1.2])  # Lever arm of the USBL sensor in meters (x, y, z) relative to the ASV's center of mass
+usbl_lever_arm = np.array([0, 0, 1.2])  # Lever arm of the USBL sensor in meters (x, y, z) relative to the ASV's center of mass
 
 """Everything below here can be altered"""
 start_time_sim = 0.  # Start time, set to None for full time
@@ -77,11 +76,11 @@ depth_sim = SensorDepth(
 
 # Accm and gyro bias zero for CV-model
 rov_est_init_nom_sim = NominalState(
-    pos=np.array([0.2, 0, 5]),  # position
-    vel=np.array([20, 0, 0]),  # velocity
-    ori=RotationQuaterion.from_euler([0, 0, 0]),  # orientation
-    accm_bias=np.zeros(3),  # accelerometer bias
-    gyro_bias=np.zeros(3),  # gyro bias
+    pos=np.array([0.0, 0.0, 5.0]),  # matches ROV trajectory start
+    vel=np.array([0.5, 0.0, 0.0]),  # realistic ROV speed ~0.5 m/s
+    ori=RotationQuaterion.from_euler([0, 0, 0]),
+    accm_bias=np.zeros(3),
+    gyro_bias=np.zeros(3),
 )
 
 rov_err_init_std_sim = np.repeat(repeats=3, a=[
@@ -107,4 +106,4 @@ rov_est_init_err_sim = MultiVarGauss[ErrorState](  # Don't change this
 
 
 eskf_sim = ESKF_cv(cv_sim, usbl_sim, range_sim, depth_sim)  # Don't change this
-x_est_init_sim = EskfState(rov_est_init_nom_sim, rov_est_init_err_sim)
+rov_est_init_sim = EskfState(rov_est_init_nom_sim, rov_est_init_err_sim)

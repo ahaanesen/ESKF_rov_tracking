@@ -8,7 +8,7 @@ from senfuslib import (TimeSequence, Simulator, ConsistencyAnalysis,
                        GaussianMixture, MultiVarGauss, NamedArray,
                        plot_field, scatter_field, fill_between_field,
                        ax_config, fig_config, show_consistency)
-from eskf.src.rov_states import EskfState, NominalState, ErrorState, GnssMeasurement, ImuMeasurement
+from rov_states import EskfState, NominalState, ErrorState, GnssMeasurement, ImuMeasurement
 from senfuslib import ConsistencyAnalysis
 import matplotlib as mpl
 from config import PLOT_MIN_DT

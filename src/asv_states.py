@@ -40,8 +40,8 @@ class UsblMeasurement(NamedArray):
         fit_error (float): the fit error value indicates the quality of fit (or confidence) of the azimuth and elevation values. 
                 Lower values (0.0) indicate better fit, while larger values (<2.0-3.0) indicate poorer fits.
     """
-    azimuth: float
-    elevation: float
+    azimuth: AtIndex[0] | float
+    elevation: AtIndex[1] | float
     fit_error: MetaData[Optional[float]] = None
 
 @ dataclass
@@ -51,6 +51,6 @@ class RangeMeasurement(NamedArray):
         range (float): the range measurement in meters.
         accuracy (Optional[float]): the reported accuracy from the sensor (not used).
     """
-    range: float
+    range: AtIndex[0] | float
     time_of_flight: MetaData[Optional[float]] = None
     accuracy: MetaData[Optional[float]] = None

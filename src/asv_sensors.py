@@ -3,8 +3,8 @@ from typing import Optional
 import numpy as np
 
 from senfuslib import MultiVarGauss
-from eskf.src.rov_states import NominalState, EskfState
-from eskf.src.asv_states import ASVState, UsblMeasurement, RangeMeasurement
+from rov_states import NominalState, EskfState
+from asv_states import ASVState, UsblMeasurement, RangeMeasurement
 from utils.cross_matrix import get_cross_matrix
 
 
@@ -15,8 +15,7 @@ class SensorUSBL:
     R: 'np.ndarray[2, 2]' = field(init=False)
 
     def __post_init__(self):
-        self.R = np.array([[self.usbl_std**2], 
-                           [self.usbl_std**2]])
+        self.R = np.diag([self.usbl_std**2, self.usbl_std**2])
 
     def H(self, rov_nom: NominalState, asv_state: ASVState) -> 'np.ndarray[2, 15]':
         """Get the measurement jacobian, H with respect to the error state.
@@ -57,7 +56,8 @@ class SensorUSBL:
 
         # 3. Fill H matrix
         # Position error state (indices 0:3)
-        H[:3, :3] = dh_dd @ np.eye(3)
+        # H[:3, :3] = dh_dd @ np.eye(3)
+        H[:2, :3] = dh_dd
 
         # Orientation error state (indices 6:9)
         # Cannot estimate ROV orientation from USBL 
@@ -89,7 +89,7 @@ class SensorUSBL:
         S = self.R + self.H(rov_est_nom, asv_state) @ P @ self.H(rov_est_nom, asv_state).T
 
 
-        z_pred = UsblMeasurement.from_array(np.array([z_pred]))
+        z_pred = UsblMeasurement.from_array(z_pred)
         z_usbl_pred_gauss = MultiVarGauss[UsblMeasurement](z_pred, S)
 
         return z_usbl_pred_gauss
@@ -160,7 +160,7 @@ class SensorRange:
         S = self.R + self.H(rov_est_nom, asv_state) @ P @ self.H(rov_est_nom, asv_state).T
 
 
-        z_pred = RangeMeasurement.from_array(np.array([z_pred]))
+        z_pred = RangeMeasurement.from_array(z_pred)
         z_range_pred_gauss = MultiVarGauss[RangeMeasurement](z_pred, S)
 
         return z_range_pred_gauss

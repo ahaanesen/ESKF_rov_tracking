@@ -1,8 +1,8 @@
 from eskf import ESKF
 from models import ModelIMU
-from eskf.src.rov_sensors import SensorGNSS
+from rov_sensors import SensorGNSS
 from utils.dataloader import load_drone_params
-from eskf.src.rov_states import EskfState, NominalState, ErrorState, RotationQuaterion
+from rov_states import EskfState, NominalState, ErrorState, RotationQuaterion
 from senfuslib import MultiVarGauss
 import numpy as np
 from config import fname_data_real, fname_data_real

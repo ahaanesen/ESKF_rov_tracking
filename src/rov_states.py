@@ -119,5 +119,5 @@ class DepthMeasurement(NamedArray):
         depth (float): the depth measurement in meters.
         accuracy (Optional[float]): the reported accuracy from the sensor (not used).
     """
-    depth: MetaData[float]
+    depth: AtIndex[0] | float
     accuracy: MetaData[Optional[float]] = None

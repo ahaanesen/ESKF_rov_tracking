@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from scipy.spatial.transform import Rotation
 
 from senfuslib import NamedArray, AtIndex
-from solution import quaternion as quaternion_solu
-
 
 @dataclass
 class RotationQuaterion(NamedArray):
@@ -46,9 +44,7 @@ class RotationQuaterion(NamedArray):
         eta_out = eta_a*eta_b - np.dot(epsilon_a, epsilon_b) # need transpose of epsilon_a to match 10.21??
         epout = eta_b*epsilon_a + eta_a*epsilon_b + np.cross(epsilon_a, epsilon_b)
 
-        # TODO remove this
-        # quaternion_product = quaternion_solu.RotationQuaterion.multiply(
-            # self, other)
+
         return RotationQuaterion(eta_out, epout)
 
     def conjugate(self) -> 'RotationQuaterion':
@@ -56,7 +52,6 @@ class RotationQuaterion(NamedArray):
 
         # TODO remove this
         conj = RotationQuaterion(self.eta, -self.epsilon)
-        # conj = quaternion_solu.RotationQuaterion.conjugate(self)
         return conj
 
     def diff(self, other: 'RotationQuaterion') -> 'RotationQuaterion':

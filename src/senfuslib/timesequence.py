@@ -218,6 +218,12 @@ class TimeSequence(Mapping, Generic[T]):
             return self.times[argmin], self.times[argmax]
         else:
             return vals[argmin], vals[argmax]
+        
+    def at_time(self, t: float) -> T:
+        idx = bisect_right(self.times, t) - 1
+        if idx < 0:
+            raise ValueError(f"No entry at or before t={t}")
+        return self._value_dict[self.times[idx]]
 
     def __iter__(self) -> Iterable[float]:
         return self.times

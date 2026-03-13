@@ -3,7 +3,7 @@ from typing import Tuple
 import numpy as np
 import scipy.linalg
 from senfuslib import MultiVarGauss, DynamicModel
-from eskf.src.rov_states import (ErrorState, ImuMeasurement,
+from rov_states import (ErrorState, ImuMeasurement,
                     CorrectedImuMeasurement, NominalState,
                     GnssMeasurement, EskfState)
 from quaternion import RotationQuaterion
