@@ -10,28 +10,28 @@ from senfuslib import MultiVarGauss
 import numpy as np
 from config import fname_data_sim, fname_data_real
 
-accm_corr, gyro_corr, imu_lever_arm = load_drone_params(fname_data_sim)
+# accm_corr, gyro_corr, imu_lever_arm = load_drone_params(fname_data_sim)
 usbl_lever_arm = np.array([0, 0, 1.2])  # Lever arm of the USBL sensor in meters (x, y, z) relative to the ASV's center of mass
 
-"""Everything below here can be altered"""
+
 start_time_sim = 0.  # Start time, set to None for full time
 end_time_sim = 300  # End time in seconds, set to None to use all data
 
 # imu_min_dt_sim = None  # IMU is sampled at 100 Hz, use to downsample
 # gnss_min_dt_sim = None  # GPS is sampled at 1 Hz, use this to downsample
 
-imu_sim = ModelIMU(
-    accm_std=1.167e-3,   # Accelerometer standard deviation, TUNABE
-    accm_bias_std=4e-3,  # Accelerometer bias standard deviation
-    accm_bias_p=1e-16,  # Accelerometer inv time constant see (10.57)
+# imu_sim = ModelIMU(
+#     accm_std=1.167e-3,   # Accelerometer standard deviation, TUNABE
+#     accm_bias_std=4e-3,  # Accelerometer bias standard deviation
+#     accm_bias_p=1e-16,  # Accelerometer inv time constant see (10.57)
 
-    gyro_std=4.36e-5,  # Gyro standard deviation
-    gyro_bias_std=5e-5,  # Gyro bias standard deviation
-    gyro_bias_p=1e-16,  # Gyro inv time constant see (10.57)
+#     gyro_std=4.36e-5,  # Gyro standard deviation
+#     gyro_bias_std=5e-5,  # Gyro bias standard deviation
+#     gyro_bias_p=1e-16,  # Gyro inv time constant see (10.57)
 
-    accm_correction=accm_corr,  # Accelerometer correction matrix
-    gyro_correction=gyro_corr,  # Gyro correction matrix
-)
+#     accm_correction=accm_corr,  # Accelerometer correction matrix
+#     gyro_correction=gyro_corr,  # Gyro correction matrix
+# )
 
 cv_sim = ModelCV(
     sigma_a=0.01,  # Acceleration standard deviation for the CV model

@@ -82,12 +82,19 @@ def run_eskf_s2(eskf: ESKF_cv,
                 z_usbl_tseq: TimeSequence[UsblMeasurement],
                 z_range_tseq: TimeSequence[RangeMeasurement],
                 ) -> tuple[TimeSequence[EskfState], TimeSequence[EskfState]]:
+    t_start = min(z_usbl_tseq.t_min, z_range_tseq.t_min)
+    
+    # Manually merge and sort to avoid combine_with t=0.0 bug
+    all_meas = ([(t, z) for t, z in z_usbl_tseq.items()] +
+                [(t, z) for t, z in z_range_tseq.items()])
+    all_meas.sort(key=lambda x: x[0])
+
     return _run_cv_scenario(
         eskf=eskf,
         rov_est_init=rov_est_init,
         asv_state_tseq=asv_state_tseq,
-        measurements=z_usbl_tseq.combine_with(z_range_tseq),
-        t_start=z_usbl_tseq.times[0],
+        measurements=all_meas,
+        t_start=t_start,
         desc="Scenario 2",
         include_init_in_upd=True,
         include_init_in_pred=False,
@@ -102,66 +109,74 @@ def run_eskf_s3(eskf: ESKF_cv,
                 z_range_tseq: TimeSequence[RangeMeasurement],
                 z_depth_tseq: TimeSequence[DepthMeasurement],
                 ) -> tuple[TimeSequence[EskfState], TimeSequence[EskfState]]:
+    t_start = min(z_usbl_tseq.t_min, z_range_tseq.t_min, z_depth_tseq.t_min)
+    
+    # Manually merge and sort to avoid combine_with t=0.0 bug
+    all_meas = ([(t, z) for t, z in z_usbl_tseq.items()] +
+                [(t, z) for t, z in z_range_tseq.items()] +
+                [(t, z) for t, z in z_depth_tseq.items()])
+    all_meas.sort(key=lambda x: x[0])
+
     return _run_cv_scenario(
         eskf=eskf,
         rov_est_init=rov_est_init,
         asv_state_tseq=asv_state_tseq,
-        measurements=z_usbl_tseq.combine_with(z_range_tseq, z_depth_tseq),
-        t_start=min(z_usbl_tseq.t_min, z_range_tseq.t_min, z_depth_tseq.t_min),
+        measurements=all_meas,
+        t_start=t_start,
         desc="Scenario 3",
         include_init_in_upd=True,
         include_init_in_pred=False,
     )
 
 
-# Scenario 4: Bearing+range+depth, IMU model for ROV, ASV with known trajectory
-def run_eskf_s4(eskf: ESKF_imu,
-                rov_est_init: EskfState,
-                asv_state_tseq: TimeSequence[ASVState],
-                z_imu_tseq: TimeSequence[ImuMeasurement],
-                z_usbl_tseq: TimeSequence[UsblMeasurement],
-                z_range_tseq: TimeSequence[RangeMeasurement],
-                z_depth_tseq: TimeSequence[DepthMeasurement],
-                ) -> tuple[TimeSequence[EskfState], TimeSequence[EskfState]]:
+# # Scenario 4: Bearing+range+depth, IMU model for ROV, ASV with known trajectory
+# def run_eskf_s4(eskf: ESKF_imu,
+#                 rov_est_init: EskfState,
+#                 asv_state_tseq: TimeSequence[ASVState],
+#                 z_imu_tseq: TimeSequence[ImuMeasurement],
+#                 z_usbl_tseq: TimeSequence[UsblMeasurement],
+#                 z_range_tseq: TimeSequence[RangeMeasurement],
+#                 z_depth_tseq: TimeSequence[DepthMeasurement],
+#                 ) -> tuple[TimeSequence[EskfState], TimeSequence[EskfState]]:
     
-    t_prev = z_imu_tseq.times[0]
-    rov_est_prev = rov_est_init
-    rov_upd_tseq = TimeSequence([(t_prev, rov_est_init)])
-    rov_pred_tseq = TimeSequence()
+#     t_prev = z_imu_tseq.times[0]
+#     rov_est_prev = rov_est_init
+#     rov_upd_tseq = TimeSequence([(t_prev, rov_est_init)])
+#     rov_pred_tseq = TimeSequence()
 
-    # Create a copy for the measurement pool
-    measurements = z_usbl_tseq.combine_with(z_range_tseq, z_depth_tseq)
+#     # Create a copy for the measurement pool
+#     measurements = z_usbl_tseq.combine_with(z_range_tseq, z_depth_tseq)
     
-    # Iterate primarily over high-frequency IMU
-    for t_imu, z_imu in tqdm(z_imu_tseq.items(), desc="Scenario 4 (IMU)"):
+#     # Iterate primarily over high-frequency IMU
+#     for t_imu, z_imu in tqdm(z_imu_tseq.items(), desc="Scenario 4 (IMU)"):
         
-        # Check if any "slow" measurements arrived since last IMU step
-        while measurements and measurements.peek()[0] <= t_imu:
-            t_m, z_m = next(measurements)
-            dt = t_m - t_prev
+#         # Check if any "slow" measurements arrived since last IMU step
+#         while measurements and measurements.peek()[0] <= t_imu:
+#             t_m, z_m = next(measurements)
+#             dt = t_m - t_prev
             
-            # Predict up to the measurement time
-            rov_est_pred = eskf.predict_from_imu(rov_est_prev, z_imu, dt)
-            rov_pred_tseq.insert(t_m, rov_est_pred) 
+#             # Predict up to the measurement time
+#             rov_est_pred = eskf.predict_from_imu(rov_est_prev, z_imu, dt)
+#             rov_pred_tseq.insert(t_m, rov_est_pred) 
             
-            # Update based on type
-            if isinstance(z_m, UsblMeasurement):
-                rov_est_upd, _ = eskf.update_from_usbl(rov_est_pred, asv_state_tseq.at_time(t_m), z_m)
-            elif isinstance(z_m, RangeMeasurement):
-                rov_est_upd, _ = eskf.update_from_range(rov_est_pred, asv_state_tseq.at_time(t_m), z_m)
-            elif isinstance(z_m, DepthMeasurement):
-                rov_est_upd, _ = eskf.update_from_depth(rov_est_pred, z_m)
+#             # Update based on type
+#             if isinstance(z_m, UsblMeasurement):
+#                 rov_est_upd, _ = eskf.update_from_usbl(rov_est_pred, asv_state_tseq.at_time(t_m), z_m)
+#             elif isinstance(z_m, RangeMeasurement):
+#                 rov_est_upd, _ = eskf.update_from_range(rov_est_pred, asv_state_tseq.at_time(t_m), z_m)
+#             elif isinstance(z_m, DepthMeasurement):
+#                 rov_est_upd, _ = eskf.update_from_depth(rov_est_pred, z_m)
             
-            rov_est_prev = rov_est_upd
-            t_prev = t_m
-            rov_upd_tseq.insert(t_m, rov_est_upd)
+#             rov_est_prev = rov_est_upd
+#             t_prev = t_m
+#             rov_upd_tseq.insert(t_m, rov_est_upd)
 
-        # Standard IMU Prediction step
-        dt = t_imu - t_prev
-        if dt > 0:
-            rov_est_pred = eskf.predict_from_imu(rov_est_prev, z_imu, dt)
-            rov_pred_tseq.insert(t_imu, rov_est_pred)
-            rov_est_prev = rov_est_pred
-            t_prev = t_imu
+#         # Standard IMU Prediction step
+#         dt = t_imu - t_prev
+#         if dt > 0:
+#             rov_est_pred = eskf.predict_from_imu(rov_est_prev, z_imu, dt)
+#             rov_pred_tseq.insert(t_imu, rov_est_pred)
+#             rov_est_prev = rov_est_pred
+#             t_prev = t_imu
 
-    return rov_upd_tseq, rov_pred_tseq
+#     return rov_upd_tseq, rov_pred_tseq

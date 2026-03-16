@@ -13,6 +13,7 @@ from asv_sensors import SensorUSBL, SensorRange
 
 from quaternion import RotationQuaterion
 from utils.cross_matrix import get_cross_matrix
+from utils.angles import wrap_to_pi
 from models import ModelIMU, ModelCV
 
 
@@ -180,7 +181,7 @@ class _ESKFUpdateShared:
         innovation = z_meas_arr - z_pred_arr
 
         if is_usbl:
-            innovation[0] = (innovation[0] + np.pi) % (2 * np.pi) - np.pi
+            innovation[0] = wrap_to_pi(innovation[0])
 
         W = np.linalg.solve(S.T, H @ P.T).T
         rov_err_upd_mean = W @ innovation

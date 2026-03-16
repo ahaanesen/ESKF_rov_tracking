@@ -5,6 +5,7 @@ import numpy as np
 from senfuslib import MultiVarGauss
 from rov_states import NominalState, EskfState
 from asv_states import ASVState, UsblMeasurement, RangeMeasurement
+from utils.angles import wrap_to_2pi
 from utils.cross_matrix import get_cross_matrix
 
 
@@ -79,12 +80,15 @@ class SensorUSBL:
 
         P = rov_est_err.cov
 
-        usbl_pos = asv_state.pos + asv_state.ori.as_rotmat() @ self.lever_arm
+        usbl_pos = asv_state.pos + asv_state.ori.as_rotmat() @ self.lever_arm # Position of USBL sensor in Navigation Frame
         d = rov_est_nom.pos - usbl_pos
         dx, dy, dz = d
+        r = np.sqrt(dx**2 + dy**2) # r in xy and rho in xyz
 
         azimuth = np.arctan2(dy, dx)
-        elevation = np.arctan2(dz, np.sqrt(dx**2 + dy**2))
+        azimuth = wrap_to_2pi(azimuth) # Wrap azimuth to [0, 2pi] (see usbl docs)
+
+        elevation = np.arctan2(dz, r)
         z_pred = np.array([azimuth, elevation])
         S = self.R + self.H(rov_est_nom, asv_state) @ P @ self.H(rov_est_nom, asv_state).T
 

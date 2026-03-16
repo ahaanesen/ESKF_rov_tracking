@@ -1,4 +1,5 @@
 import numpy as np
+from utils.angles import wrap_to_2pi
 from asv_states import ASVState, RangeMeasurement, UsblMeasurement
 from rov_states import DepthMeasurement, ImuMeasurement, NominalState
 from senfuslib import TimeSequence
@@ -13,7 +14,7 @@ class MeasurementGenerator:
 
     def generate_usbl(self, std_rad: float, lever_arm: np.ndarray,
                       rate_hz: float = 1.0) -> TimeSequence:
-        """Generates USBL azimuth/elevation measurements in ASV body frame."""
+        """Generates USBL azimuth/elevation measurements in NED world frame."""
         t_start = max(self.asv_tseq.t_min, self.rov_tseq.t_min)
         t_end   = min(self.asv_tseq.t_max, self.rov_tseq.t_max)
         times = np.arange(t_start, t_end, 1.0 / rate_hz)
@@ -23,19 +24,21 @@ class MeasurementGenerator:
             asv = self.asv_tseq.at_time(t)
             rov = self.rov_tseq.at_time(t)
 
-            p_rel_w = rov.pos - asv.pos
-            R_wb = asv.ori.as_rotmat()
-            p_rel_b = R_wb.T @ p_rel_w - lever_arm
+            sensor_pos = asv.pos + asv.ori.as_rotmat() @ lever_arm
+            d = rov.pos - sensor_pos
+            dx, dy, dz = d
+            r = np.sqrt(dx**2 + dy**2) # r in xy and rho in xyz
 
-            azi  = np.arctan2(p_rel_b[1], p_rel_b[0])
-            #azi = azi % (2 * np.pi) # Ensure azimuth is in [0, 2*pi)
-            elev = np.arctan2(-p_rel_b[2], np.linalg.norm(p_rel_b[:2])) # Positive elevation is downwards in NED frame TODO: Check sign convention
+            azi = np.arctan2(dy, dx) # Azimuth where 0 is north and increases clockwise (see usbl docs)
+            azi = wrap_to_2pi(azi) # Wrap azimuth to [0, 2pi] (see usbl docs)
+            elev = np.arctan2(dz, r) # Positive elevation is downwards
+
 
             noise = np.random.normal(0, std_rad, 2)
-            #z_list.append((t, UsblMeasurement(np.array([azi + noise[0], elev + noise[1]]))))
-            z_list.append((t, UsblMeasurement.from_array(
-                np.array([azi % (2 * np.pi), -elev]) + noise  # wrap azi, negate elev for NED convention
-            )))
+            z = np.array([azi, elev]) + noise
+            z[0] = wrap_to_2pi(z[0]) # Wrap azimuth to [0, 2pi] after adding noise
+
+            z_list.append((t, UsblMeasurement.from_array(z)))
         return TimeSequence(z_list)
 
     def generate_range(self, std_m: float, lever_arm: np.ndarray,
@@ -52,7 +55,7 @@ class MeasurementGenerator:
 
             sensor_pos = asv.pos + asv.ori.as_rotmat() @ lever_arm
             dist = np.linalg.norm(sensor_pos - rov.pos)
-        z_list.append((t, RangeMeasurement.from_array(np.array([dist + np.random.normal(0, std_m)]))))
+            z_list.append((t, RangeMeasurement.from_array(np.array([dist + np.random.normal(0, std_m)]))))
 
         return TimeSequence(z_list)
 

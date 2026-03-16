@@ -36,7 +36,7 @@ class UsblMeasurement(NamedArray):
     """Represents data received from a USBL sensor, consists of azimuth and elevation measurements.
     Args:
         azimuth (float): the azimuth measurement. Values between [0, 2pi], where 0 is north, and increases clockwise.
-        elevation (float): the elevation measurement. Values between [-pi/2, pi/2], where 0 is horizontal, positive is up, and negative is down.
+        elevation (float): the elevation measurement. Values between [-pi/2, pi/2], where 0 is horizontal, positive is down.
         fit_error (float): the fit error value indicates the quality of fit (or confidence) of the azimuth and elevation values. 
                 Lower values (0.0) indicate better fit, while larger values (<2.0-3.0) indicate poorer fits.
     """

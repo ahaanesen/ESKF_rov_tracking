@@ -225,6 +225,8 @@ class PlotterESKF:
         plt.show(block=True)
 
     def _save(self, fig, name: str):
+        if fig is None:
+            return
         if self.save_dir is not None:
             path = Path(self.save_dir)
             path.mkdir(parents=True, exist_ok=True)
