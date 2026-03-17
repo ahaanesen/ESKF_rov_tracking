@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Optional
 import numpy as np
 
 from senfuslib import MultiVarGauss
@@ -22,9 +21,8 @@ class SensorGNSS:
     def H(self, x_nom: NominalState) -> 'np.ndarray[3, 15]':
         """Get the measurement jacobian, H with respect to the error state.
 
-        Hint: the gnss antenna has a relative position to the center given by
-        self.lever_arm. How will the gnss measurement change if the drone is 
-        rotated differently? Use get_cross_matrix and some other stuff. 
+        The gnss antenna has a relative position to the center given by
+        self.lever_arm. Need lever arm compensation in the measurement model, ie -R x lever_arm in the jacobian.
 
         Returns:
             H (ndarray[3, 15]): the measurement matrix
@@ -80,7 +78,7 @@ class SensorDepth:
 
     def pred_from_est(self, x_est: EskfState,
                       ) -> MultiVarGauss[DepthMeasurement]:
-        """Predict the depth measurement
+        """Predict the depth measurement.
 
         Args:
             x_est: eskf state

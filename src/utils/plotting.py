@@ -74,7 +74,7 @@ class PlotterESKF:
 
         ax.set_xlabel('North [m]')
         ax.set_ylabel('East [m]')
-        ax.set_zlabel('Up [m]')
+        ax.set_zlabel('Down [m]')
         ax.set_title(f'{self.scenario_name} — 3D Trajectories')
         ax.legend()
         fig.tight_layout()

@@ -28,7 +28,7 @@ class RotationQuaterion(NamedArray):
 
     def multiply(self, other: 'RotationQuaterion') -> 'RotationQuaterion':
         """Multiply two rotation quaternions
-        Hint: see (10.21)
+        See (10.21) in the Sensor Fusion book.
 
         As __matmul__ is implemented for this class, you can later use:
         q1@q2 which is equivalent to q1.multiply(q2)
@@ -41,7 +41,7 @@ class RotationQuaterion(NamedArray):
         eta_a, epsilon_a = self
         eta_b, epsilon_b = other
 
-        eta_out = eta_a*eta_b - np.dot(epsilon_a, epsilon_b) # need transpose of epsilon_a to match 10.21??
+        eta_out = eta_a*eta_b - np.dot(epsilon_a, epsilon_b)
         epout = eta_b*epsilon_a + eta_a*epsilon_b + np.cross(epsilon_a, epsilon_b)
 
 

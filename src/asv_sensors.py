@@ -121,14 +121,14 @@ class SensorRange:
         d = rov_nom.pos - pos_sensor
         dx, dy, dz = d
 
-        r = np.sqrt(dx**2 + dy**2 + dz**2)
+        rho = np.sqrt(dx**2 + dy**2 + dz**2)
 
         # Handle the singularity at zero range
-        if r < 1e-6:
+        if rho < 1e-6:
             return H 
 
         # 2. dr/dd: Jacobian of range w.r.t the relative vector d
-        dr_dd = np.array([[dx/r, dy/r, dz/r]])
+        dr_dd = np.array([[dx/rho, dy/rho, dz/rho]])
 
         # 3. Fill H matrix
         # Position error state (indices 0:3)
