@@ -50,7 +50,6 @@ class RotationQuaterion(NamedArray):
     def conjugate(self) -> 'RotationQuaterion':
         """Get the conjugate of the RotationQuaternion"""
 
-        # TODO remove this
         conj = RotationQuaterion(self.eta, -self.epsilon)
         return conj
 

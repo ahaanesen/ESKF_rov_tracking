@@ -1,8 +1,8 @@
 import numpy as np
 
-from asv_states import ASVState
+from tracking_only.asv_states import ASVState
 from quaternion import RotationQuaterion
-from rov_states import NominalState
+from tracking_only.rov_states import NominalState
 from senfuslib.timesequence import TimeSequence
 
 
