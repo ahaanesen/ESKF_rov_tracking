@@ -34,30 +34,6 @@ def generate_trajectories(duration=300, dt=0.1):
         )
         asv_states.append((t[i], state))
         
-    # # --- ROV Trajectory (Descending Spiral) ---
-    # rov_radius = 10
-    # rov_omega = 0.08
-    # rov_descend_rate = 0.1 # m/s
-    
-    # rov_pos = np.stack([
-    #     rov_radius * np.cos(rov_omega * t),
-    #     rov_radius * np.sin(rov_omega * t),
-    #     5 + rov_descend_rate * t # Starts at 5m depth
-    # ], axis=1)
-    
-    # rov_gt_states = []
-    # for i in range(len(t)):
-    #     # NominalState matches your ESKF ROV state structure
-    #     state = NominalState(
-    #         pos=rov_pos[i],
-    #         vel=np.array([-rov_radius * rov_omega * np.sin(rov_omega * t[i]),
-    #                       rov_radius * rov_omega * np.cos(rov_omega * t[i]),
-    #                       rov_descend_rate]),
-    #         ori=RotationQuaterion.from_euler([0, 0, rov_omega * t[i]]),
-    #         accm_bias=np.zeros(3),
-    #         gyro_bias=np.zeros(3)
-    #     )
-    #     rov_gt_states.append((t[i], state))
 
     # ROV: waypoint path with depth changes
     waypoints = [

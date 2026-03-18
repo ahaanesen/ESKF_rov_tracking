@@ -1,12 +1,11 @@
 import numpy as np
 from tqdm import tqdm
-from matplotlib import pyplot as plt
 
 from tracking_only.asv_states import ASVState, RangeMeasurement, UsblMeasurement
-from tracking_only.eskf import ESKF_cv, ESKF_imu
+from tracking_only.eskf import ESKF_cv
 
-from tracking_only.rov_states import DepthMeasurement, EskfState, ImuMeasurement
-from senfuslib import MultiVarGauss, TimeSequence
+from tracking_only.rov_states import DepthMeasurement, EskfState
+from senfuslib import TimeSequence
 
 # Only running ESKF on simulated data
 
@@ -128,55 +127,3 @@ def run_eskf_s3(eskf: ESKF_cv,
         include_init_in_pred=False,
     )
 
-
-# # Scenario 4: Bearing+range+depth, IMU model for ROV, ASV with known trajectory
-# def run_eskf_s4(eskf: ESKF_imu,
-#                 rov_est_init: EskfState,
-#                 asv_state_tseq: TimeSequence[ASVState],
-#                 z_imu_tseq: TimeSequence[ImuMeasurement],
-#                 z_usbl_tseq: TimeSequence[UsblMeasurement],
-#                 z_range_tseq: TimeSequence[RangeMeasurement],
-#                 z_depth_tseq: TimeSequence[DepthMeasurement],
-#                 ) -> tuple[TimeSequence[EskfState], TimeSequence[EskfState]]:
-    
-#     t_prev = z_imu_tseq.times[0]
-#     rov_est_prev = rov_est_init
-#     rov_upd_tseq = TimeSequence([(t_prev, rov_est_init)])
-#     rov_pred_tseq = TimeSequence()
-
-#     # Create a copy for the measurement pool
-#     measurements = z_usbl_tseq.combine_with(z_range_tseq, z_depth_tseq)
-    
-#     # Iterate primarily over high-frequency IMU
-#     for t_imu, z_imu in tqdm(z_imu_tseq.items(), desc="Scenario 4 (IMU)"):
-        
-#         # Check if any "slow" measurements arrived since last IMU step
-#         while measurements and measurements.peek()[0] <= t_imu:
-#             t_m, z_m = next(measurements)
-#             dt = t_m - t_prev
-            
-#             # Predict up to the measurement time
-#             rov_est_pred = eskf.predict_from_imu(rov_est_prev, z_imu, dt)
-#             rov_pred_tseq.insert(t_m, rov_est_pred) 
-            
-#             # Update based on type
-#             if isinstance(z_m, UsblMeasurement):
-#                 rov_est_upd, _ = eskf.update_from_usbl(rov_est_pred, asv_state_tseq.at_time(t_m), z_m)
-#             elif isinstance(z_m, RangeMeasurement):
-#                 rov_est_upd, _ = eskf.update_from_range(rov_est_pred, asv_state_tseq.at_time(t_m), z_m)
-#             elif isinstance(z_m, DepthMeasurement):
-#                 rov_est_upd, _ = eskf.update_from_depth(rov_est_pred, z_m)
-            
-#             rov_est_prev = rov_est_upd
-#             t_prev = t_m
-#             rov_upd_tseq.insert(t_m, rov_est_upd)
-
-#         # Standard IMU Prediction step
-#         dt = t_imu - t_prev
-#         if dt > 0:
-#             rov_est_pred = eskf.predict_from_imu(rov_est_prev, z_imu, dt)
-#             rov_pred_tseq.insert(t_imu, rov_est_pred)
-#             rov_est_prev = rov_est_pred
-#             t_prev = t_imu
-
-#     return rov_upd_tseq, rov_pred_tseq

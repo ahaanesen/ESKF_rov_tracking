@@ -4,7 +4,7 @@ from typing import Any, Optional, Tuple
 
 from senfuslib import MultiVarGauss
 
-from tracking_only.models import ModelIMU, ModelCV
+from tracking_and_navigation.models import ModelIMU, ModelCV
 from quaternion import RotationQuaterion
 from utils.cross_matrix import get_cross_matrix
 from utils.angles import wrap_to_pi

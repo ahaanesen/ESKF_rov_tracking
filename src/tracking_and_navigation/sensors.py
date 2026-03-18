@@ -57,14 +57,14 @@ class SensorGNSS_ASV:
 @dataclass
 class SensorUSBL_Joint:
     usbl_std: float
-    lever_arm_asv: "np.ndarray"  # (3,) lever arm from ASV origin to USBL head, in ASV body
+    lever_arm: "np.ndarray"  # (3,) lever arm from ASV origin to USBL head, in ASV body
     R: "np.ndarray" = field(init=False)
 
     def __post_init__(self):
         self.R = np.diag([self.usbl_std**2, self.usbl_std**2])
 
     def _relative_vector_ned(self, asv: ASVNominalState, rov: ROVNominalCV) -> np.ndarray:
-        p_usbl = asv.pos + asv.ori.as_rotmat() @ self.lever_arm_asv
+        p_usbl = asv.pos + asv.ori.as_rotmat() @ self.lever_arm
         return rov.pos - p_usbl  # d = p_rov - p_usbl
 
     def pred_from_est(self, x_est: JointEskfState) -> MultiVarGauss[UsblMeasurement]:
@@ -125,7 +125,7 @@ class SensorUSBL_Joint:
         # Since d = ... - R*lever, we get:
         # δd_att ≈ - (δ(R*lever)) ≈ + R*[lever]_x*δtheta
         R_asv = asv.ori.as_rotmat()
-        dd_dtheta = R_asv @ get_cross_matrix(self.lever_arm_asv)  # (3,3)
+        dd_dtheta = R_asv @ get_cross_matrix(self.lever_arm)  # (3,3)
 
         H[:, JointIdx.ASV_AVEC] = dh_dd @ dd_dtheta
 
@@ -139,7 +139,7 @@ class SensorUSBL_Joint:
 @dataclass
 class SensorRange_Joint:
     range_std: float
-    lever_arm_asv: "np.ndarray"
+    lever_arm: "np.ndarray"
     R: "np.ndarray" = field(init=False)
 
     def __post_init__(self):
@@ -150,7 +150,7 @@ class SensorRange_Joint:
         rov = x_est.nom.rov
         P = x_est.err.cov
 
-        p_sensor = asv.pos + asv.ori.as_rotmat() @ self.lever_arm_asv
+        p_sensor = asv.pos + asv.ori.as_rotmat() @ self.lever_arm
         d = rov.pos - p_sensor
         rho = float(np.linalg.norm(d))
 
@@ -163,7 +163,7 @@ class SensorRange_Joint:
         H = np.zeros((1, JointIdx.N))
         
         R_asv = asv.ori.as_rotmat()
-        p_sensor = asv.pos + R_asv @ self.lever_arm_asv
+        p_sensor = asv.pos + R_asv @ self.lever_arm
         d = rov.pos - p_sensor
         rho = float(np.linalg.norm(d))
         if rho < 1e-6:
@@ -176,7 +176,7 @@ class SensorRange_Joint:
         H[:, JointIdx.ASV_POS] = -dr_dd
 
         # attitude term: same logic as USBL
-        dd_dtheta = R_asv @ get_cross_matrix(self.lever_arm_asv)  # (3,3)
+        dd_dtheta = R_asv @ get_cross_matrix(self.lever_arm)  # (3,3)
         H[:, JointIdx.ASV_AVEC] = dr_dd @ dd_dtheta
 
         return H

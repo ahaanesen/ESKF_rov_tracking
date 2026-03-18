@@ -2,10 +2,10 @@ from dataclasses import dataclass, field
 from typing import Tuple
 import numpy as np
 import scipy.linalg
-from senfuslib import MultiVarGauss, DynamicModel
+from senfuslib import MultiVarGauss
 from tracking_only.rov_states import (ErrorState, ImuMeasurement,
                     CorrectedImuMeasurement, NominalState,
-                    GnssMeasurement, EskfState)
+                    EskfState)
 from quaternion import RotationQuaterion
 from utils.indexing import block_3x3
 from utils.cross_matrix import get_cross_matrix
