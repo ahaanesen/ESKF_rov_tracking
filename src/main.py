@@ -1,8 +1,6 @@
 from tracking_only.run_simulations import run_simulations as run_simulations_tracking
 from tracking_and_navigation.run_simulations import run_simulations as run_simulations_nav
-
-
-RUN = "tracking_only"  # "tracking_only" or "tracking_and_navigation"
+from config import RUN
 
 
 def main():

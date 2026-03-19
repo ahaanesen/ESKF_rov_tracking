@@ -1,0 +1,19 @@
+[project]
+name = "eskf_rov_asv"
+version = "0.1.0"
+description = "ESKF simulation for ROV tracking and (optionally) ASV navigation."
+requires-python = ">=3.9"
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "pyqt5",
+    "pytest",
+    "ipython",
+    "jupyter",
+    "flake8",
+    "pylint",
+    "autopep8",
+    "tqdm",
+]

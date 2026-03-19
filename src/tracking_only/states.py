@@ -4,15 +4,9 @@ from typing import Optional, TYPE_CHECKING, Union
 
 # if TYPE_CHECKING:  # used to avoid circular imports with solution
 from quaternion import RotationQuaterion
-from senfuslib import NamedArray, AtIndex, MetaData
+from senfuslib import NamedArray, AtIndex
 from senfuslib import MultiVarGauss
-
-@dataclass
-class WithXYZ(NamedArray):
-    x: AtIndex[0]
-    y: AtIndex[1]
-    z: AtIndex[2]
-    xy: AtIndex[0:2]
+from utils.withXYZ import WithXYZ
 
 # -----------------------------------------------------------------------------
 # ASV state (not to be estimated), considered ground-truth (RTK quality)

@@ -4,18 +4,7 @@ from typing import Optional
 
 from quaternion import RotationQuaterion
 from senfuslib import NamedArray, AtIndex, MetaData, MultiVarGauss
-
-# -----------------------------------------------------------------------------
-# Common helper
-# -----------------------------------------------------------------------------
-
-@dataclass
-class WithXYZ(NamedArray):
-    x: AtIndex[0]
-    y: AtIndex[1]
-    z: AtIndex[2]
-    xy: AtIndex[0:2]
-
+from utils.withXYZ import WithXYZ
 
 # -----------------------------------------------------------------------------
 # ASV state (15-state ESKF nominal + 15-state error)
