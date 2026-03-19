@@ -88,35 +88,55 @@ class PlotterESKFJoint:
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection="3d")
 
-        ned_sign = np.array([1, 1, -1])  # flip z for plotting (up positive)
-
         # ROV GT
         if self.rov_gt is not None:
-            gt_pos = _extract_pos(self.rov_gt, attrgetter("pos")) * ned_sign
+            gt_pos = _extract_pos(self.rov_gt, attrgetter("pos"))
             ax.plot(*gt_pos.T, label="ROV ground truth", linestyle="--", color="C1", alpha=0.8)
             ax.scatter(*gt_pos[0], marker="x", color="red", s=60, label="ROV start")
 
         # ROV estimate
         if self.x_upds is not None and self.x_upds.values:
-            est_pos = self._rov_est_pos(self.x_upds) * ned_sign
+            est_pos = self._rov_est_pos(self.x_upds)
             ax.plot(*est_pos.T, label="ROV estimate (upd)", color="C0", alpha=0.8)
 
         # ASV GT
         if self.asv_gt is not None:
-            asv_pos = _extract_pos(self.asv_gt, attrgetter("pos")) * ned_sign
+            asv_pos = _extract_pos(self.asv_gt, attrgetter("pos"))
             ax.plot(*asv_pos.T, label="ASV ground truth", color="C2", linestyle="-.", alpha=0.6)
             ax.scatter(*asv_pos[0], marker="^", color="C2", s=60)
 
         # ASV estimate
         if self.x_upds is not None and self.x_upds.values:
-            asv_est_pos = self._asv_est_pos(self.x_upds) * ned_sign
+            asv_est_pos = self._asv_est_pos(self.x_upds)
             ax.plot(*asv_est_pos.T, label="ASV estimate (upd)", color="C3", alpha=0.8)
 
-        ax.set_xlabel("North [m]")
-        ax.set_ylabel("East [m]")
-        ax.set_zlabel("Up [m]")  # we flipped sign
+        # Critical fixes for z-axis visibility
+        ax.set_xlabel("North [m]", labelpad=10)
+        ax.set_ylabel("East [m]", labelpad=10)
+        ax.set_zlabel("Down [m]", labelpad=10)
+
+        ax.invert_zaxis()  # Invert z-axis to have depth increasing downwards
+        
+        # Force the z-axis to be visible by adjusting viewing angle
+        ax.view_init(elev=15, azim=-110)  # More extreme angle
+        
+        # Ensure tight aspect ratio doesn't hide axes
+        ax.set_box_aspect(None)  # Auto aspect
+        
+        # Make the panes transparent so axes show through
+        ax.xaxis.pane.set_edgecolor('black')
+        ax.yaxis.pane.set_edgecolor('black')
+        ax.zaxis.pane.set_edgecolor('black')
+        ax.xaxis.pane.set_alpha(0.1)
+        ax.yaxis.pane.set_alpha(0.1)
+        ax.zaxis.pane.set_alpha(0.1)
+        
+        # Force grid on all axes
+        ax.grid(True)
+        
         ax.set_title(f"{self.scenario_name} — 3D Trajectories")
-        ax.legend()
+        ax.legend(loc='upper right')
+        
         fig.tight_layout()
         return fig
 

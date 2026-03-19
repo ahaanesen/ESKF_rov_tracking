@@ -51,7 +51,7 @@ class PlotterESKF:
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection='3d')
 
-        ned_sign = np.array([1, 1, -1])  # flip z for plotting (up positive)
+        ned_sign = np.array([1, 1, 1])  # flip z for plotting (up positive)
 
         # ROV ground truth
         if self.rov_gt is not None:
@@ -71,13 +71,34 @@ class PlotterESKF:
                     linestyle='-.', alpha=0.6)
             ax.scatter(*asv_pos[0], marker='^', color='C2', s=60)
 
-        ax.set_xlabel('North [m]')
-        ax.set_ylabel('East [m]')
-        ax.set_zlabel('Down [m]')
-        ax.set_title(f'{self.scenario_name} — 3D Trajectories')
-        ax.legend()
-        fig.tight_layout()
+        # Critical fixes for z-axis visibility
+        ax.set_xlabel("North [m]", labelpad=10)
+        ax.set_ylabel("East [m]", labelpad=10)
+        ax.set_zlabel("Down [m]", labelpad=10)
 
+        ax.invert_zaxis()  # Invert z-axis to have depth increasing downwards
+        
+        # Force the z-axis to be visible by adjusting viewing angle
+        ax.view_init(elev=15, azim=-110)  # More extreme angle
+        
+        # Ensure tight aspect ratio doesn't hide axes
+        ax.set_box_aspect(None)  # Auto aspect
+        
+        # Make the panes transparent so axes show through
+        ax.xaxis.pane.set_edgecolor('black')
+        ax.yaxis.pane.set_edgecolor('black')
+        ax.zaxis.pane.set_edgecolor('black')
+        ax.xaxis.pane.set_alpha(0.1)
+        ax.yaxis.pane.set_alpha(0.1)
+        ax.zaxis.pane.set_alpha(0.1)
+        
+        # Force grid on all axes
+        ax.grid(True)
+        
+        ax.set_title(f"{self.scenario_name} — 3D Trajectories")
+        ax.legend(loc='upper right')
+        
+        fig.tight_layout()
         return fig
 
     def plot_position(self):
