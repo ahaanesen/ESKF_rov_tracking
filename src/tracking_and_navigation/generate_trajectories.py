@@ -3,7 +3,7 @@ import numpy as np
 from quaternion import RotationQuaterion
 from senfuslib.timesequence import TimeSequence
 
-from tracking_and_navigation.states import ASVNominalState, ROVNominalCV
+from tracking_and_navigation.states import AsvNominalState, RovNominalCV
 from tracking_and_navigation.measurements import ImuMeasurement
 
 
@@ -83,7 +83,7 @@ def generate_trajectories(duration: float = 300.0, dt: float = 0.1):
         asv_states.append(
             (
                 float(ti),
-                ASVNominalState(
+                AsvNominalState(
                     pos=asv_pos[i],
                     vel=asv_vel[i],
                     ori=RotationQuaterion.from_euler([0.0, 0.0, float(asv_yaw[i])]),
@@ -146,7 +146,7 @@ def generate_trajectories(duration: float = 300.0, dt: float = 0.1):
             rov_states.append(
                 (
                     float(ti),
-                    ROVNominalCV(
+                    RovNominalCV(
                         pos=pos,
                         vel=seg_vel,
                     ),

@@ -7,8 +7,8 @@ from quaternion import RotationQuaterion
 from tracking_and_navigation.states import (
     JointEskfState,
     JointIdx,
-    ASVNominalState,
-    ROVNominalCV,
+    AsvNominalState,
+    RovNominalCV,
 )
 from tracking_and_navigation.measurements import GnssMeasurement, UsblMeasurement, RangeMeasurement, DepthMeasurement
 from utils.cross_matrix import get_cross_matrix
@@ -29,7 +29,7 @@ class SensorGNSS_ASV:
     def __post_init__(self):
         self.R = np.diag([self.gnss_std_ne**2, self.gnss_std_ne**2, self.gnss_std_d**2])
 
-    def H(self, asv_nom: ASVNominalState) -> np.ndarray:
+    def H(self, asv_nom: AsvNominalState) -> np.ndarray:
         """
         Return H of shape (3, 21). Only ASV part is filled.
         Same as your old GNSS H, just embedded in the joint error state.
@@ -63,7 +63,7 @@ class SensorUSBL_Joint:
     def __post_init__(self):
         self.R = np.diag([self.usbl_std**2, self.usbl_std**2])
 
-    def _relative_vector_ned(self, asv: ASVNominalState, rov: ROVNominalCV) -> np.ndarray:
+    def _relative_vector_ned(self, asv: AsvNominalState, rov: RovNominalCV) -> np.ndarray:
         p_usbl = asv.pos + asv.ori.as_rotmat() @ self.lever_arm
         return rov.pos - p_usbl  # d = p_rov - p_usbl
 
@@ -85,7 +85,7 @@ class SensorUSBL_Joint:
 
         return MultiVarGauss(UsblMeasurement.from_array(z_pred), S)
 
-    def H(self, asv: ASVNominalState, rov: ROVNominalCV) -> np.ndarray:
+    def H(self, asv: AsvNominalState, rov: RovNominalCV) -> np.ndarray:
         """
         Joint Jacobian H: shape (2, 21)
 
@@ -159,7 +159,7 @@ class SensorRange_Joint:
         S = self.R + H @ P @ H.T
         return MultiVarGauss(RangeMeasurement.from_array(z_pred), S)
 
-    def H(self, asv: ASVNominalState, rov: ROVNominalCV) -> np.ndarray:
+    def H(self, asv: AsvNominalState, rov: RovNominalCV) -> np.ndarray:
         H = np.zeros((1, JointIdx.N))
         
         R_asv = asv.ori.as_rotmat()

@@ -3,7 +3,7 @@ import numpy as np
 from utils.angles import wrap_to_2pi
 from senfuslib import TimeSequence
 
-from tracking_and_navigation.states import ASVNominalState, ROVNominalCV
+from tracking_and_navigation.states import AsvNominalState, RovNominalCV
 from tracking_and_navigation.measurements import (
     GnssMeasurement,
     ImuMeasurement,
@@ -16,8 +16,8 @@ from tracking_and_navigation.measurements import (
 class MeasurementGenerator:
     def __init__(
         self,
-        asv_tseq: TimeSequence[ASVNominalState],
-        rov_tseq: TimeSequence[ROVNominalCV],
+        asv_tseq: TimeSequence[AsvNominalState],
+        rov_tseq: TimeSequence[RovNominalCV],
     ):
         self.asv_tseq = asv_tseq
         self.rov_tseq = rov_tseq

@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 
 from senfuslib import TimeSequence
 
-from tracking_and_navigation.states import JointEskfState, JointNominalState, ASVNominalState, ROVNominalCV
+from tracking_and_navigation.states import JointEskfState, JointNominalState, AsvNominalState, RovNominalCV
 from tracking_and_navigation.measurements import (
     GnssMeasurement,
     UsblMeasurement,
@@ -28,8 +28,8 @@ def _extract_pos(tseq: TimeSequence, getter) -> np.ndarray:
 @dataclass
 class PlotterESKFJoint:
     # Ground truth and estimates
-    rov_gt: TimeSequence[ROVNominalCV]          # ROV ground truth (CV)
-    asv_gt: TimeSequence[ASVNominalState]       # ASV ground truth (nominal with pos/vel/ori/bias)
+    rov_gt: TimeSequence[RovNominalCV]          # ROV ground truth (CV)
+    asv_gt: TimeSequence[AsvNominalState]       # ASV ground truth (nominal with pos/vel/ori/bias)
 
     x_upds: TimeSequence[JointEskfState]        # joint updated states
     x_preds: TimeSequence[JointEskfState]       # joint predicted states

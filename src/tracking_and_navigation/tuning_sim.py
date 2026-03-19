@@ -16,8 +16,8 @@ from tracking_and_navigation.states import (
     JointIdx,
     JointNominalState,
     JointErrorState,
-    ASVNominalState,
-    ROVNominalCV,
+    AsvNominalState,
+    RovNominalCV,
 )
 
 # -----------------------------------------------------------------------------
@@ -84,7 +84,7 @@ depth_sim = SensorDepth_ROV(
 # -----------------------------------------------------------------------------
 # Initial estimate (Joint state)
 # -----------------------------------------------------------------------------
-asv_est_init_nom_sim = ASVNominalState(
+asv_est_init_nom_sim = AsvNominalState(
     pos=np.array([50.0, 0.0, 0.0]),
     vel=np.array([0.0, 0.0, 0.0]),
     ori=RotationQuaterion.from_euler([0.0, 0.0, 0.0]),
@@ -104,7 +104,7 @@ asv_err_init_std_sim = np.repeat(
     ],
 )
 
-rov_est_init_nom_sim = ROVNominalCV(
+rov_est_init_nom_sim = RovNominalCV(
     pos=np.array([0.0, 0.0, 5.0]),
     vel=np.array([0.5, 0.0, 0.0]),
 )

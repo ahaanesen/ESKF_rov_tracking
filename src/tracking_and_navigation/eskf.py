@@ -14,8 +14,8 @@ from tracking_and_navigation.states import (
     JointNominalState,
     JointErrorState,
     JointIdx,
-    ASVNominalState,
-    ROVNominalCV,
+    AsvNominalState,
+    RovNominalCV,
 )
 
 from tracking_and_navigation.measurements import (
@@ -118,7 +118,7 @@ class _ESKFJointShared:
         asv_ab_inj = asv_nom.accm_bias + d_asv_ab
         asv_gb_inj = asv_nom.gyro_bias + d_asv_gb
 
-        asv_inj = ASVNominalState(asv_pos_inj, asv_vel_inj, asv_ori_inj, asv_ab_inj, asv_gb_inj)
+        asv_inj = AsvNominalState(asv_pos_inj, asv_vel_inj, asv_ori_inj, asv_ab_inj, asv_gb_inj)
 
         # --- ROV part (6)
         d_rov_pos = np.asarray(dx.rov_pos, dtype=float).reshape(3)
@@ -127,7 +127,7 @@ class _ESKFJointShared:
         rov_nom = x_nom.rov
         rov_pos_inj = rov_nom.pos + d_rov_pos
         rov_vel_inj = rov_nom.vel + d_rov_vel
-        rov_inj = ROVNominalCV(rov_pos_inj, rov_vel_inj)
+        rov_inj = RovNominalCV(rov_pos_inj, rov_vel_inj)
 
         nom_inj = JointNominalState(asv=asv_inj, rov=rov_inj)
 

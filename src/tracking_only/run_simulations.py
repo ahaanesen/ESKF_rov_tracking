@@ -1,6 +1,6 @@
 from tracking_only.plotting import PlotterESKF
-from utils.generate_trajectory import generate_trajectories
-from utils.generate_measurements import MeasurementGenerator
+from tracking_only.generate_trajectory import generate_trajectories
+from tracking_only.generate_measurements import MeasurementGenerator
 from tracking_only.run_eskf import run_eskf_s1, run_eskf_s2, run_eskf_s3
 from tracking_only.tuning_sim import (eskf_sim, rov_est_init_sim,
                         start_time_sim, end_time_sim,
@@ -65,7 +65,7 @@ def run_simulations():
         rov_preds=pred_s1,
         z_usbl=z_usbl_tseq,
         scenario_name="Scenario 1: Bearing only (CV)",
-        save_dir="plots/scenario1",
+        save_dir="plots/tracking_only/scenario1",
     ).show()
     PlotterESKF(
         rov_gt=rov_gt_tseq,
@@ -75,7 +75,7 @@ def run_simulations():
         z_usbl=z_usbl_tseq,
         z_range=z_range_tseq,
         scenario_name="Scenario 2: Bearing + Range (CV)",
-        save_dir="plots/scenario2",
+        save_dir="plots/tracking_only/scenario2",
     ).show()
     PlotterESKF(
         rov_gt=rov_gt_tseq,
@@ -86,7 +86,7 @@ def run_simulations():
         z_range=z_range_tseq,
         z_depth=z_depth_tseq,
         scenario_name="Scenario 3: Bearing + Range + Depth (CV)",
-        save_dir="plots/scenario3",
+        save_dir="plots/tracking_only/scenario3",
     ).show()
 
 # if __name__ == '__main__':

@@ -7,9 +7,6 @@ from quaternion import RotationQuaterion
 from senfuslib import NamedArray, AtIndex, MetaData
 from senfuslib import MultiVarGauss
 
-from config import DEBUG
-
-
 @dataclass
 class WithXYZ(NamedArray):
     x: AtIndex[0]
@@ -17,9 +14,27 @@ class WithXYZ(NamedArray):
     z: AtIndex[2]
     xy: AtIndex[0:2]
 
-
+# -----------------------------------------------------------------------------
+# ASV state (not to be estimated), considered ground-truth (RTK quality)
+# -----------------------------------------------------------------------------
 @dataclass
-class NominalState(NamedArray):
+class ASVState(NamedArray):
+    """
+    ASV pose.
+    Both fields are considered ground-truth (RTK quality).
+
+    pos (ndarray[3]): position in NED
+    ori (RotationQuaterion): orientation as a quaternion in NED
+    """
+    pos: AtIndex[0:3] | WithXYZ
+    ori: AtIndex[3:7] | RotationQuaterion
+
+# -----------------------------------------------------------------------------
+# ROV state (to be estimated)
+# -----------------------------------------------------------------------------
+# TODO: Is still IMU based and should be CV based
+@dataclass
+class RovNominalState(NamedArray):
     """Class representing a nominal state. See (Table 10.1) in the book.
 
     Args:
@@ -35,13 +50,13 @@ class NominalState(NamedArray):
     accm_bias: AtIndex[10:13] | WithXYZ
     gyro_bias: AtIndex[13:16] | WithXYZ
 
-    def diff(self, other: 'NominalState') -> 'ErrorState':
+    def diff(self, other: 'RovNominalState') -> 'RovErrorState':
         """Calculate the difference between two nominal states.
         Used to calculate NEES.
         Returns:
             ErrorState: error state representing the difference
         """
-        return NominalState(
+        return RovNominalState(
             pos=self.pos - other.pos,
             vel=self.vel - other.vel,
             ori=self.ori.diff_as_avec(other.ori),
@@ -55,7 +70,7 @@ class NominalState(NamedArray):
 
 
 @dataclass
-class ErrorState(NamedArray):
+class RovErrorState(NamedArray):
     """Class representing a nominal state. See (Table 10.1) in the book."""
     pos: AtIndex[0:3] | WithXYZ
     vel: AtIndex[3:6] | WithXYZ
@@ -65,59 +80,17 @@ class ErrorState(NamedArray):
 
 
 @dataclass
-class EskfState:
+class RovEskfState:
     """A combination of nominal and error state"""
-    nom: NominalState
-    err: MultiVarGauss[ErrorState]
+    nom: RovNominalState
+    err: MultiVarGauss[RovErrorState]
 
-    def get_err_gauss(self, gt: NominalState) -> MultiVarGauss[ErrorState]:
+    def get_err_gauss(self, gt: RovNominalState) -> MultiVarGauss[RovErrorState]:
         """Used to calculate error and NEES"""
-        err = ErrorState(
+        err = RovErrorState(
             pos=self.nom.pos - gt.pos,
             vel=self.nom.vel - gt.vel,
             avec=gt.ori.diff_as_avec(self.nom.ori),
             accm_bias=self.nom.accm_bias - gt.accm_bias,
             gyro_bias=self.nom.gyro_bias - gt.gyro_bias)
-        return MultiVarGauss[ErrorState](err, self.err.cov)
-
-
-@dataclass
-class ImuMeasurement(NamedArray):
-    """Represents raw data received from the imu, see (10.53) in the book and 
-    the note in the assignment pdf.
-    Args:
-        acc: accelerometer measurement
-        avel: gyro measurement
-    """
-    acc: AtIndex[0:3] | WithXYZ
-    avel: AtIndex[3:6] | WithXYZ
-
-
-@dataclass
-class CorrectedImuMeasurement(ImuMeasurement):
-    """Represents processed data from the IMU.
-    Corrected for axis alignmentand scale scale, and bias. 
-    Not 'corrected' for gravity.
-    """
-
-
-@ dataclass
-class GnssMeasurement(NamedArray):
-    """Represents data received from gnss
-    Args:
-        pos(ndarray[:, 3]): GPS position measurement
-        accuracy (Optional[float]): the reported accuracy from the gnss (not used)
-    """
-    pos: AtIndex[0:3] | WithXYZ
-    accuracy: MetaData[Optional[float]] = None
-
-
-@ dataclass
-class DepthMeasurement(NamedArray):
-    """Represents a depth measurement from a pressure sensor.
-    Args:
-        depth (float): the depth measurement in meters.
-        accuracy (Optional[float]): the reported accuracy from the sensor (not used).
-    """
-    depth: AtIndex[0] | float
-    accuracy: MetaData[Optional[float]] = None
+        return MultiVarGauss[RovErrorState](err, self.err.cov)

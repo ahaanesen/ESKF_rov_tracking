@@ -2,7 +2,7 @@ from tracking_only.run_simulations import run_simulations as run_simulations_tra
 from tracking_and_navigation.run_simulations import run_simulations as run_simulations_nav
 
 
-RUN = "tracking_and_navigation"  # "tracking_only" or "tracking_and_navigation"
+RUN = "tracking_only"  # "tracking_only" or "tracking_and_navigation"
 
 
 def main():

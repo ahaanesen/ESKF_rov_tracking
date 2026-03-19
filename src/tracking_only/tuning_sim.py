@@ -1,13 +1,13 @@
-from tracking_only.eskf import ESKF_cv
-from tracking_only.models import ModelIMU, ModelCV
-from tracking_only.rov_sensors import SensorDepth
-from tracking_only.asv_sensors import SensorRange, SensorUSBL
-from tracking_only.rov_states import EskfState, NominalState, ErrorState, RotationQuaterion
-from tracking_only.asv_states import ASVState
-
 from senfuslib import MultiVarGauss
 import numpy as np
-from config import fname_data_sim, fname_data_real
+
+from quaternion import RotationQuaterion
+
+from tracking_only.eskf import ESKF_cv
+from tracking_only.models import ModelCV
+from tracking_only.states import RovNominalState, RovErrorState, RovEskfState
+from tracking_only.sensors import SensorUSBL, SensorRange, SensorDepth
+
 
 
 usbl_lever_arm = np.array([0, 0, 1.2])  # Lever arm of the USBL sensor in meters (x, y, z) relative to the ASV's center of mass
@@ -37,7 +37,7 @@ depth_sim = SensorDepth(
 )
 
 # Accm and gyro bias zero for CV-model
-rov_est_init_nom_sim = NominalState(
+rov_est_init_nom_sim = RovNominalState(
     pos=np.array([0.0, 0.0, 5.0]),  # matches ROV trajectory start
     vel=np.array([0.5, 0.0, 0.0]),  # realistic ROV speed ~0.5 m/s
     ori=RotationQuaterion.from_euler([0, 0, 0]),
@@ -54,10 +54,10 @@ rov_err_init_std_sim = np.repeat(repeats=3, a=[
 ])
 
 
-rov_est_init_err_sim = MultiVarGauss[ErrorState]( 
+rov_est_init_err_sim = MultiVarGauss[RovErrorState]( 
     np.zeros(15), 
     np.diag(rov_err_init_std_sim**2)) 
 
 
 eskf_sim = ESKF_cv(cv_sim, usbl_sim, range_sim, depth_sim) 
-rov_est_init_sim = EskfState(rov_est_init_nom_sim, rov_est_init_err_sim)
+rov_est_init_sim = RovEskfState(rov_est_init_nom_sim, rov_est_init_err_sim)

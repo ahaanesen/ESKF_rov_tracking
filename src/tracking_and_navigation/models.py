@@ -9,9 +9,9 @@ from quaternion import RotationQuaterion
 from utils.indexing import block_3x3
 from utils.cross_matrix import get_cross_matrix
 
-from tracking_and_navigation.states import (ASVNominalState,
-                    ROVNominalCV, 
-                    ROVErrorCV)
+from tracking_and_navigation.states import (AsvNominalState,
+                    RovNominalCV, 
+                    RovErrorCV)
 
 from tracking_and_navigation.measurements import ImuMeasurement, CorrectedImuMeasurement
 
@@ -53,12 +53,12 @@ class ModelIMU:
             diag3(self.gyro_bias_std**2),
         )
 
-    def correct_z_imu(self, x_est_nom: ASVNominalState, z_imu: ImuMeasurement) -> CorrectedImuMeasurement:
+    def correct_z_imu(self, x_est_nom: AsvNominalState, z_imu: ImuMeasurement) -> CorrectedImuMeasurement:
         acc_est = self.accm_correction @ (z_imu.acc - x_est_nom.accm_bias)
         avel_est = self.gyro_correction @ (z_imu.avel - x_est_nom.gyro_bias)
         return CorrectedImuMeasurement(acc_est, avel_est)
 
-    def predict_nom(self, x_est_nom: ASVNominalState, z_corr: CorrectedImuMeasurement, dt: float) -> ASVNominalState:
+    def predict_nom(self, x_est_nom: AsvNominalState, z_corr: CorrectedImuMeasurement, dt: float) -> AsvNominalState:
         Rq = x_est_nom.ori.as_rotmat()
         acc_world = Rq @ z_corr.acc + self.g
 
@@ -71,9 +71,9 @@ class ModelIMU:
         acc_bias_pred = x_est_nom.accm_bias
         gyro_bias_pred = x_est_nom.gyro_bias
 
-        return ASVNominalState(pos_pred, vel_pred, ori_pred, acc_bias_pred, gyro_bias_pred)
+        return AsvNominalState(pos_pred, vel_pred, ori_pred, acc_bias_pred, gyro_bias_pred)
 
-    def A_c(self, x_est_nom: ASVNominalState, z_corr: CorrectedImuMeasurement) -> np.ndarray:
+    def A_c(self, x_est_nom: AsvNominalState, z_corr: CorrectedImuMeasurement) -> np.ndarray:
         A_c = np.zeros((15, 15))
         Rq = x_est_nom.ori.as_rotmat()
         S_acc = get_cross_matrix(z_corr.acc)
@@ -87,7 +87,7 @@ class ModelIMU:
 
         return A_c
 
-    def get_error_G_c(self, x_est_nom: ASVNominalState) -> np.ndarray:
+    def get_error_G_c(self, x_est_nom: AsvNominalState) -> np.ndarray:
         G_c = np.zeros((15, 12))
         Rq = x_est_nom.ori.as_rotmat()
 
@@ -100,7 +100,7 @@ class ModelIMU:
 
     def get_discrete_error_diff(
         self,
-        x_est_nom: ASVNominalState,
+        x_est_nom: AsvNominalState,
         z_corr: CorrectedImuMeasurement,
         dt: float,
     ) -> Tuple[np.ndarray, np.ndarray]:
@@ -152,10 +152,10 @@ class ModelCV:
     """
     sigma_a: float
 
-    def predict_nom(self, rov_nom: ROVNominalCV, dt: float) -> ROVNominalCV:
+    def predict_nom(self, rov_nom: RovNominalCV, dt: float) -> RovNominalCV:
         pos_pred = rov_nom.pos + dt * rov_nom.vel
         vel_pred = rov_nom.vel
-        return ROVNominalCV(pos_pred, vel_pred)
+        return RovNominalCV(pos_pred, vel_pred)
 
     def F_Q(self, dt: float) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -177,7 +177,7 @@ class ModelCV:
         Q = np.block([[Q_pp, Q_pv], [Q_pv, Q_vv]])  # (6,6)
         return F, Q
 
-    def predict_err(self, err_prev: MultiVarGauss[ROVErrorCV], dt: float) -> MultiVarGauss[ROVErrorCV]:
+    def predict_err(self, err_prev: MultiVarGauss[RovErrorCV], dt: float) -> MultiVarGauss[RovErrorCV]:
         """
         Predict only the ROV CV error Gaussian (6x6).
         Mean remains zero.
@@ -185,4 +185,4 @@ class ModelCV:
         P_prev = err_prev.cov
         F, Q = self.F_Q(dt)
         P_pred = F @ P_prev @ F.T + Q
-        return MultiVarGauss(ROVErrorCV.from_array(np.zeros(6)), P_pred)
+        return MultiVarGauss(RovErrorCV.from_array(np.zeros(6)), P_pred)

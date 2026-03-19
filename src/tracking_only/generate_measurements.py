@@ -1,14 +1,15 @@
 import numpy as np
 from utils.angles import wrap_to_2pi
-from tracking_only.asv_states import ASVState, RangeMeasurement, UsblMeasurement
-from tracking_only.rov_states import DepthMeasurement, ImuMeasurement, NominalState
 from senfuslib import TimeSequence
+
+from tracking_only.states import RovNominalState, ASVState
+from tracking_only.measurements import UsblMeasurement, RangeMeasurement, DepthMeasurement
 
 
 class MeasurementGenerator:
     def __init__(self,
                  asv_tseq: TimeSequence[ASVState],
-                 rov_tseq: TimeSequence[NominalState]):
+                 rov_tseq: TimeSequence[RovNominalState]):
         self.asv_tseq = asv_tseq
         self.rov_tseq = rov_tseq
 

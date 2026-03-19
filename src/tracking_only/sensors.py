@@ -3,10 +3,11 @@ from typing import Optional
 import numpy as np
 
 from senfuslib import MultiVarGauss
-from tracking_only.rov_states import NominalState, EskfState
-from tracking_only.asv_states import ASVState, UsblMeasurement, RangeMeasurement
 from utils.angles import wrap_to_2pi
-from utils.cross_matrix import get_cross_matrix
+
+from tracking_only.states import RovNominalState, RovEskfState, ASVState
+from tracking_only.measurements import UsblMeasurement, RangeMeasurement, DepthMeasurement
+
 
 
 @ dataclass
@@ -18,7 +19,7 @@ class SensorUSBL:
     def __post_init__(self):
         self.R = np.diag([self.usbl_std**2, self.usbl_std**2])
 
-    def H(self, rov_nom: NominalState, asv_state: ASVState) -> 'np.ndarray[2, 15]':
+    def H(self, rov_nom: RovNominalState, asv_state: ASVState) -> 'np.ndarray[2, 15]':
         """Get the measurement jacobian, H with respect to the error state.
 
         Hint: the usbl sensor has a relative position to the center of the ASV given by
@@ -65,7 +66,7 @@ class SensorUSBL:
 
         return H
     
-    def pred_from_est(self, rov_est: EskfState, asv_state: ASVState
+    def pred_from_est(self, rov_est: RovEskfState, asv_state: ASVState
                       ) -> MultiVarGauss[UsblMeasurement]:
         """Predict the usbl measurement
 
@@ -107,7 +108,7 @@ class SensorRange:
     def __post_init__(self):
         self.R = np.array([[self.range_std**2]])
     
-    def H(self, rov_nom: NominalState, asv_state: ASVState) -> 'np.ndarray[1, 15]':
+    def H(self, rov_nom: RovNominalState, asv_state: ASVState) -> 'np.ndarray[1, 15]':
         """Get the measurement jacobian, H with respect to the error state.
 
          Returns:
@@ -139,7 +140,7 @@ class SensorRange:
 
         return H
     
-    def pred_from_est(self, rov_est: EskfState, asv_state: ASVState
+    def pred_from_est(self, rov_est: RovEskfState, asv_state: ASVState
                       ) -> MultiVarGauss[RangeMeasurement]:
         """Predict the range measurement
 
@@ -168,3 +169,44 @@ class SensorRange:
         z_range_pred_gauss = MultiVarGauss[RangeMeasurement](z_pred, S)
 
         return z_range_pred_gauss
+    
+@ dataclass
+class SensorDepth:
+    depth_std: float
+    R: 'np.ndarray[1, 1]' = field(init=False)
+
+    def __post_init__(self):
+        self.R = np.array([[self.depth_std**2]])
+
+    def H(self, x_nom: RovNominalState) -> 'np.ndarray[1, 15]':
+        """Get the measurement jacobian, H with respect to the error state.
+
+        Returns:
+            H (ndarray[1, 15]): the measurement matrix
+        """
+        H = np.zeros((1, 15))
+        H[0, 2] = 1
+
+        return H
+
+    def pred_from_est(self, x_est: RovEskfState,
+                      ) -> MultiVarGauss[DepthMeasurement]:
+        """Predict the depth measurement.
+
+        Args:
+            x_est: eskf state
+
+        Returns:
+            z_depth_pred_gauss: depth prediction gaussian
+        """
+        x_est_nom = x_est.nom
+        x_est_err = x_est.err
+        P = x_est_err.cov
+        z_pred = x_est_nom.pos.z
+        S = self.R + self.H(x_est_nom) @ P @ self.H(x_est_nom).T
+
+        z_pred = DepthMeasurement.from_array(np.array([z_pred]))
+        z_depth_pred_gauss = MultiVarGauss[DepthMeasurement](z_pred, S)
+
+        return z_depth_pred_gauss
+    

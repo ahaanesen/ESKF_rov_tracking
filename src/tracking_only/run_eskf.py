@@ -1,25 +1,25 @@
 import numpy as np
 from tqdm import tqdm
 
-from tracking_only.asv_states import ASVState, RangeMeasurement, UsblMeasurement
-from tracking_only.eskf import ESKF_cv
-
-from tracking_only.rov_states import DepthMeasurement, EskfState
 from senfuslib import TimeSequence
+
+from tracking_only.states import RovEskfState, ASVState
+from tracking_only.measurements import UsblMeasurement, RangeMeasurement, DepthMeasurement
+from tracking_only.eskf import ESKF_cv
 
 # Only running ESKF on simulated data
 
 
 def _run_cv_scenario(
     eskf: ESKF_cv,
-    rov_est_init: EskfState,
+    rov_est_init: RovEskfState,
     asv_state_tseq: TimeSequence[ASVState],
     measurements,
     t_start: float,
     desc: str,
     include_init_in_upd: bool,
     include_init_in_pred: bool,
-) -> tuple[TimeSequence[EskfState], TimeSequence[EskfState]]:
+) -> tuple[TimeSequence[RovEskfState], TimeSequence[RovEskfState]]:
     t_prev = t_start
     rov_est_prev = rov_est_init
 
@@ -57,11 +57,11 @@ def _run_cv_scenario(
 
 # Scenario 1: Bearing only (USBL: azi+elev), CV model for ROV, ASV with known trajectory
 def run_eskf_s1(eskf: ESKF_cv,
-                rov_est_init: EskfState,
+                rov_est_init: RovEskfState,
                 asv_state_tseq: TimeSequence[ASVState],
                 z_usbl_tseq: TimeSequence[UsblMeasurement],
-                ) -> tuple[TimeSequence[EskfState],
-                           TimeSequence[EskfState]]:
+                ) -> tuple[TimeSequence[RovEskfState],
+                           TimeSequence[RovEskfState]]:
     return _run_cv_scenario(
         eskf=eskf,
         rov_est_init=rov_est_init,
@@ -76,11 +76,11 @@ def run_eskf_s1(eskf: ESKF_cv,
 
 # Scenario 2: Bearing+range, CV model for ROV, ASV with known trajectory
 def run_eskf_s2(eskf: ESKF_cv,
-                rov_est_init: EskfState,
+                rov_est_init: RovEskfState,
                 asv_state_tseq: TimeSequence[ASVState],
                 z_usbl_tseq: TimeSequence[UsblMeasurement],
                 z_range_tseq: TimeSequence[RangeMeasurement],
-                ) -> tuple[TimeSequence[EskfState], TimeSequence[EskfState]]:
+                ) -> tuple[TimeSequence[RovEskfState], TimeSequence[RovEskfState]]:
     t_start = min(z_usbl_tseq.t_min, z_range_tseq.t_min)
     
     # Manually merge and sort to avoid combine_with t=0.0 bug
@@ -102,12 +102,12 @@ def run_eskf_s2(eskf: ESKF_cv,
 
 # Scenario 3: Bearing+range+depth, CV model for ROV, ASV with known trajectory
 def run_eskf_s3(eskf: ESKF_cv,
-                rov_est_init: EskfState,
+                rov_est_init: RovEskfState,
                 asv_state_tseq: TimeSequence[ASVState],
                 z_usbl_tseq: TimeSequence[UsblMeasurement],
                 z_range_tseq: TimeSequence[RangeMeasurement],
                 z_depth_tseq: TimeSequence[DepthMeasurement],
-                ) -> tuple[TimeSequence[EskfState], TimeSequence[EskfState]]:
+                ) -> tuple[TimeSequence[RovEskfState], TimeSequence[RovEskfState]]:
     t_start = min(z_usbl_tseq.t_min, z_range_tseq.t_min, z_depth_tseq.t_min)
     
     # Manually merge and sort to avoid combine_with t=0.0 bug

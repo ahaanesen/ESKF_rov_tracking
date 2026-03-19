@@ -1,9 +1,8 @@
 import numpy as np
-
-from tracking_only.asv_states import ASVState
 from quaternion import RotationQuaterion
-from tracking_only.rov_states import NominalState
 from senfuslib.timesequence import TimeSequence
+
+from tracking_only.states import ASVState, RovNominalState
 
 
 def generate_trajectories(duration=300, dt=0.1):
@@ -56,7 +55,7 @@ def generate_trajectories(duration=300, dt=0.1):
             pos = p0 + alpha * (p1 - p0)
             yaw = np.arctan2(seg_vel[1], seg_vel[0])
             ori = RotationQuaterion.from_euler([0, 0, yaw])
-            state = NominalState(pos=pos, vel=seg_vel, ori=ori,
+            state = RovNominalState(pos=pos, vel=seg_vel, ori=ori,
                                  accm_bias=np.zeros(3), gyro_bias=np.zeros(3))
             rov_gt_states.append((ti, state))
 

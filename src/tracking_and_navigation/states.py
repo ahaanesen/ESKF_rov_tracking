@@ -22,7 +22,7 @@ class WithXYZ(NamedArray):
 # -----------------------------------------------------------------------------
 
 @dataclass
-class ASVNominalState(NamedArray):
+class AsvNominalState(NamedArray):
     """
     ASV nominal ESKF state in NED.
     16 elements (pos(3), vel(3), quat(4), acc_bias(3), gyro_bias(3))
@@ -33,13 +33,13 @@ class ASVNominalState(NamedArray):
     accm_bias: AtIndex[10:13] | WithXYZ
     gyro_bias: AtIndex[13:16] | WithXYZ
 
-    def diff(self, other: 'ASVNominalState') -> 'ASVErrorState':
+    def diff(self, other: 'AsvNominalState') -> 'AsvErrorState':
         """Calculate the difference between two nominal states.
         Used to calculate NEES.
         Returns:
-            ASVErrorState: error state representing the difference
+            AsvErrorState: error state representing the difference
         """
-        return ASVErrorState(
+        return AsvErrorState(
             pos=self.pos - other.pos,
             vel=self.vel - other.vel,
             avec=self.ori.diff_as_avec(other.ori),
@@ -53,7 +53,7 @@ class ASVNominalState(NamedArray):
 
 
 @dataclass
-class ASVErrorState(NamedArray):
+class AsvErrorState(NamedArray):
     """
     ASV error-state (15): dp(3), dv(3), dtheta(3), dab(3), dgb(3)
     """
@@ -69,14 +69,14 @@ class ASVErrorState(NamedArray):
 # -----------------------------------------------------------------------------
 
 @dataclass
-class ROVNominalCV(NamedArray):
+class RovNominalCV(NamedArray):
     """ROV nominal CV state in NED: pos(3), vel(3)"""
     pos: AtIndex[0:3] | WithXYZ
     vel: AtIndex[3:6] | WithXYZ
 
 
 @dataclass
-class ROVErrorCV(NamedArray):
+class RovErrorCV(NamedArray):
     """ROV CV error-state: dp(3), dv(3)"""
     pos: AtIndex[0:3] | WithXYZ
     vel: AtIndex[3:6] | WithXYZ
@@ -117,8 +117,8 @@ class JointNominalState:
     with different sizes (16 vs 6). Keeping them separate makes
     prediction/injection much simpler and avoids fake quaternion for ROV.
     """
-    asv: ASVNominalState
-    rov: ROVNominalCV
+    asv: AsvNominalState
+    rov: RovNominalCV
 
 
 @dataclass

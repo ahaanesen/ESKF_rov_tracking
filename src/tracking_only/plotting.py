@@ -6,9 +6,8 @@ import numpy as np
 import matplotlib as mpl
 
 from senfuslib import TimeSequence, MultiVarGauss
-from tracking_only.rov_states import EskfState, NominalState
-from tracking_only.asv_states import ASVState, UsblMeasurement, RangeMeasurement
-from tracking_only.rov_states import DepthMeasurement
+from tracking_only.states import RovNominalState, RovEskfState, ASVState
+from tracking_only.measurements import UsblMeasurement, RangeMeasurement, DepthMeasurement
 
 
 mpl.rcParams['axes.grid'] = True
@@ -23,10 +22,10 @@ def _extract_pos(tseq: TimeSequence, getter) -> np.ndarray:
 @dataclass
 class PlotterESKF:
     # Ground truth and estimates
-    rov_gt:      TimeSequence[NominalState]         # ROV ground truth
+    rov_gt:      TimeSequence[RovNominalState]         # ROV ground truth
     asv_gt:      TimeSequence[ASVState]             # ASV ground truth
-    rov_upds:    TimeSequence[EskfState]            # ESKF updated states
-    rov_preds:   TimeSequence[EskfState]            # ESKF predicted states
+    rov_upds:    TimeSequence[RovEskfState]            # ESKF updated states
+    rov_preds:   TimeSequence[RovEskfState]            # ESKF predicted states
 
     # Measurements (all optional)
     z_usbl:  TimeSequence[UsblMeasurement]  = None
@@ -37,13 +36,13 @@ class PlotterESKF:
     save_dir: str = None # Optional directory to save plots instead of showing them interactively, eg. "plots/"
 
 
-    def _rov_est_pos(self, tseq: TimeSequence[EskfState]) -> np.ndarray:
+    def _rov_est_pos(self, tseq: TimeSequence[RovEskfState]) -> np.ndarray:
         return np.stack([v.nom.pos for v in tseq.values])
 
-    def _rov_est_vel(self, tseq: TimeSequence[EskfState]) -> np.ndarray:
+    def _rov_est_vel(self, tseq: TimeSequence[RovEskfState]) -> np.ndarray:
         return np.stack([v.nom.vel for v in tseq.values])
 
-    def _rov_est_std(self, tseq: TimeSequence[EskfState]) -> np.ndarray:
+    def _rov_est_std(self, tseq: TimeSequence[RovEskfState]) -> np.ndarray:
         """Return 3-sigma position std from error covariance."""
         return np.stack([3 * np.sqrt(np.diag(v.err.cov)[:3])
                          for v in tseq.values])
