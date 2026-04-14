@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  eskf:
+    container_name: eskf_humble
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: eskf-humble:latest
+    tty: true
+    stdin_open: true
+    volumes:
+      - .:/ws/src/ESKF_rov_tracking
+    working_dir: /ws/src/ESKF_rov_tracking

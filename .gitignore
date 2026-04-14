@@ -2,3 +2,8 @@
 __pycache__/
 plots/*
 ./venv/
+
+# Ignoring ros2 build, log and install folders
+build/
+log/
+install/

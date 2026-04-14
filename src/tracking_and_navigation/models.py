@@ -35,7 +35,8 @@ class ModelIMU:
     accm_correction: "np.ndarray"  # (3,3)
     gyro_correction: "np.ndarray"  # (3,3)
 
-    g: "np.ndarray" = field(default=np.array([0, 0, 9.82]))
+    # g: "np.ndarray" = field(default=np.array([0, 0, 9.82]))
+    g: np.ndarray = field(default_factory=lambda: np.array([0, 0, 9.81]))
 
     Q_c: "np.ndarray" = field(init=False, repr=False)
 
