@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.interpolate import splprep, splev
 
 from quaternion import RotationQuaterion
 from senfuslib.timesequence import TimeSequence
@@ -36,46 +37,63 @@ def generate_trajectories(duration: float = 300.0, dt: float = 0.1):
 
     # -------------------------------------------------------------------------
     # ASV trajectory: orbit around an offset center (never directly above ROV)
+    # Speed oscillates to improve bearing observability.
     # -------------------------------------------------------------------------
     asv_center = np.array([30.0, 0.0, 0.0])
     asv_radius = 25.0
-    asv_omega = 0.05  # rad/s
+    asv_omega_base = 0.05   # mean angular velocity, rad/s
+    asv_omega_amp  = 0.02   # oscillation amplitude, rad/s  (~40 % of base)
+    asv_omega_mod  = 0.10   # oscillation frequency, rad/s  (~63 s period)
+
+    # Instantaneous angular velocity: omega(t) = omega_base + omega_amp*sin(omega_mod*t)
+    asv_omega_t = asv_omega_base + asv_omega_amp * np.sin(asv_omega_mod * t)
+
+    # Angular acceleration: d(omega)/dt = omega_amp * omega_mod * cos(omega_mod*t)
+    asv_alpha_t = asv_omega_amp * asv_omega_mod * np.cos(asv_omega_mod * t)
+
+    # Heading angle: integral of omega(t)
+    # theta(t) = omega_base*t - (omega_amp/omega_mod)*cos(omega_mod*t) + C
+    # Choose C so theta(0)=0: C = omega_amp/omega_mod
+    asv_theta = (
+        asv_omega_base * t
+        - (asv_omega_amp / asv_omega_mod) * np.cos(asv_omega_mod * t)
+        + (asv_omega_amp / asv_omega_mod)
+    )
 
     # Position in NED
-    # N = centerN + R cos(wt)
-    # E = centerE + R sin(wt)
-    # D = 0
     asv_pos = np.stack(
         [
-            asv_center[0] + asv_radius * np.cos(asv_omega * t),
-            asv_center[1] + asv_radius * np.sin(asv_omega * t),
+            asv_center[0] + asv_radius * np.cos(asv_theta),
+            asv_center[1] + asv_radius * np.sin(asv_theta),
             np.zeros_like(t),
         ],
         axis=1,
     )
 
-    # Velocity in NED: derivative of position
+    # Velocity in NED: d/dt [R cos(theta), R sin(theta)] = R * omega(t) * [-sin, cos]
     asv_vel = np.stack(
         [
-            -asv_radius * asv_omega * np.sin(asv_omega * t),
-            +asv_radius * asv_omega * np.cos(asv_omega * t),
+            -asv_radius * asv_omega_t * np.sin(asv_theta),
+            +asv_radius * asv_omega_t * np.cos(asv_theta),
             np.zeros_like(t),
         ],
         axis=1,
     )
 
-    # Acceleration in NED: derivative of velocity
+    # Acceleration in NED: centripetal + tangential
     asv_acc = np.stack(
         [
-            -asv_radius * (asv_omega**2) * np.cos(asv_omega * t),
-            -asv_radius * (asv_omega**2) * np.sin(asv_omega * t),
+            -asv_radius * asv_omega_t**2 * np.cos(asv_theta)
+            - asv_radius * asv_alpha_t  * np.sin(asv_theta),
+            -asv_radius * asv_omega_t**2 * np.sin(asv_theta)
+            + asv_radius * asv_alpha_t  * np.cos(asv_theta),
             np.zeros_like(t),
         ],
         axis=1,
     )
 
-    # Yaw aligned with velocity direction (tangent to circle)
-    asv_yaw = np.array([_ned_yaw_from_velocity(v, fallback_yaw=0.0) for v in asv_vel])
+    # Yaw aligned with velocity direction (tangent to circle): theta + pi/2
+    asv_yaw = asv_theta + np.pi / 2
 
     # Build ASV states (biases = 0 ground truth)
     asv_states = []
@@ -116,41 +134,70 @@ def generate_trajectories(duration: float = 300.0, dt: float = 0.1):
         # since roll=pitch=0 and yaw changes smoothly, omega_b approx [0,0,yaw_rate]
         # yaw_rate is constant here = omega (for perfect circle), in NED.
         # For small roll/pitch, omega_body ≈ [0,0, yaw_rate]
-        omega_b = np.array([0.0, 0.0, asv_omega])
+        omega_b = np.array([0.0, 0.0, asv_omega_t[i]])
 
         imu_meas.append((float(ti), ImuMeasurement(acc=f_b, avel=omega_b)))
 
     # -------------------------------------------------------------------------
-    # ROV ground truth: waypoint path with depth changes (CV nominal)
+    # ROV ground truth: smooth spline path with constant speed
     # -------------------------------------------------------------------------
-    waypoints = [
-        (np.array([0.0, 0.0, 5.0]), 0.0),
-        (np.array([20.0, 5.0, 10.0]), 60.0),
-        (np.array([40.0, 0.0, 15.0]), 120.0),
-        (np.array([40.0, 20.0, 20.0]), 180.0),
-        (np.array([20.0, 20.0, 12.0]), 240.0),
-        (np.array([0.0, 0.0, 5.0]), 300.0),
+
+    waypoints_new = [
+        np.array([0.0, 0.0, 5.0]),
+        np.array([10.0, 20.0, 10.0]),
+        np.array([20.0, 10.0, 15.0]),
+        np.array([30.0, 20.0, 20.0]),
+        np.array([40.0, 0.0, 25.0]),
+        np.array([30.0, -20.0, 18.0]),
+        np.array([20.0, -10.0, 15.0]),
+        np.array([10.0, -20.0, 12.0]),
+        np.array([0.0, 0.0, 5.0]),
     ]
 
+    pts = np.array(waypoints_new)
+    x, y, z = pts[:, 0], pts[:, 1], pts[:, 2]
+
+    # Build spline
+
+    tck, u = splprep([x, y, z], s=0, k=3)
+
+    # High‑res sampling for arc length
+    u_fine = np.linspace(0, 1, 5000)
+    x_f, y_f, z_f = splev(u_fine, tck)
+
+    diffs = np.sqrt(np.diff(x_f)**2 + np.diff(y_f)**2 + np.diff(z_f)**2)
+    arc_length = np.concatenate(([0], np.cumsum(diffs)))
+    arc_length_norm = arc_length / arc_length[-1]
+
+    # Constant‑speed parameterization for the simulation times
+    t_norm = np.zeros_like(t)
+    if t[-1] > t[0]:
+           t_norm = (t - t[0]) / (t[-1] - t[0])
+    u_const = np.interp(t_norm, arc_length_norm, u_fine)
+
+    # Evaluate spline at constant speed
+    x_c, y_c, z_c = splev(u_const, tck)
+
+    # Compute velocity by differentiating spline
+    dx_du, dy_du, dz_du = splev(u_const, tck, der=1)
+    du_dt = np.gradient(u_const, t, edge_order=2)
+    dx = dx_du * du_dt
+    dy = dy_du * du_dt
+    dz = dz_du * du_dt
+
     rov_states = []
-    for i in range(len(waypoints) - 1):
-        p0, t0 = waypoints[i]
-        p1, t1 = waypoints[i + 1]
-        seg_vel = (p1 - p0) / (t1 - t0)
+    for i, ti in enumerate(t):
+        pos = np.array([x_c[i], y_c[i], z_c[i]])
+        vel = np.array([dx[i], dy[i], dz[i]])
 
-        seg_t = t[(t >= t0) & (t < t1)]
-        for ti in seg_t:
-            alpha = (ti - t0) / (t1 - t0)
-            pos = p0 + alpha * (p1 - p0)
-
-            rov_states.append(
-                (
-                    float(ti),
-                    RovNominalCV(
-                        pos=pos,
-                        vel=seg_vel,
-                    ),
-                )
+        rov_states.append(
+            (
+                float(ti),
+                RovNominalCV(
+                    pos=pos,
+                    vel=vel,
+                ),
             )
+        )
 
     return TimeSequence(asv_states), TimeSequence(rov_states), TimeSequence(imu_meas)

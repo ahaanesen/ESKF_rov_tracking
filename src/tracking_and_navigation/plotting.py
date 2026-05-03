@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from operator import attrgetter
 from pathlib import Path
+import csv
 
 import matplotlib as mpl
 import numpy as np
@@ -23,6 +24,33 @@ mpl.rcParams["legend.fontsize"] = "small"
 
 def _extract_pos(tseq: TimeSequence, getter) -> np.ndarray:
     return np.stack([getter(v) for v in tseq.values])
+
+def _interp(t_src: np.ndarray, x_src: np.ndarray, t_tgt: np.ndarray) -> np.ndarray:
+    """
+    Interpolate vector-valued time series.
+    t_src: (N,)
+    x_src: (N, d)
+    t_tgt: (M,)
+    returns: (M, d)
+    """
+    x_i = np.zeros((len(t_tgt), x_src.shape[1]))
+    for k in range(x_src.shape[1]):
+        x_i[:, k] = np.interp(t_tgt, t_src, x_src[:, k])
+    return x_i
+
+
+def _rmse(gt: np.ndarray, est: np.ndarray):
+    """
+    Per-time-step position RMSE.
+    gt, est: (N, 3)
+    returns:
+      rmse: (N,)
+      err:  (N, 3)
+    """
+    err = est - gt
+    rmse = np.sqrt(np.mean(err**2, axis=1))
+    return rmse, err
+
 
 
 @dataclass
@@ -137,6 +165,73 @@ class PlotterESKFJoint:
         ax.set_title(f"{self.scenario_name} — 3D Trajectories")
         ax.legend(loc='upper right')
         
+        fig.tight_layout()
+        return fig
+    
+    def plot_rmse(self):
+        """
+        Plot position RMSE over time for ROV and ASV.
+        RMSE = sqrt(mean((x_est - x_gt)^2)) at each time.
+        """
+
+        print("Plotting RMSE...")
+        if self.x_upds is None:
+            return None
+
+        fig, axs = plt.subplots(2, 1, figsize=(10, 6), sharex=False)
+
+        # -------------------------------------------------
+        # ROV RMSE
+        # -------------------------------------------------
+        if self.rov_gt is not None:
+            rov_gt_t = np.asarray(self.rov_gt.times)
+            rov_gt_pos = _extract_pos(self.rov_gt, attrgetter("pos"))
+
+            rov_est_t = np.asarray(self.x_upds.times)
+            rov_est_pos = self._rov_est_pos(self.x_upds)
+
+            rov_est_i = _interp(rov_est_t, rov_est_pos, rov_gt_t)
+            rov_rmse, _ = _rmse(rov_gt_pos, rov_est_i)
+
+            axs[0].plot(
+                rov_gt_t,
+                rov_rmse,
+                label="ROV position RMSE",
+                color="C0",
+            )
+
+        axs[0].set_ylabel("RMSE [m]")
+        axs[0].set_title("ROV Position RMSE")
+        axs[0].grid(True)
+        axs[0].legend()
+
+        # -------------------------------------------------
+        # ASV RMSE
+        # -------------------------------------------------
+        if self.asv_gt is not None:
+            asv_gt_t = np.asarray(self.asv_gt.times)
+            asv_gt_pos = _extract_pos(self.asv_gt, attrgetter("pos"))
+
+            asv_est_t = np.asarray(self.x_upds.times)
+            asv_est_pos = self._asv_est_pos(self.x_upds)
+
+            asv_est_i = _interp(asv_est_t, asv_est_pos, asv_gt_t)
+            asv_rmse, _ = _rmse(asv_gt_pos, asv_est_i)
+
+            axs[1].plot(
+                asv_gt_t,
+                asv_rmse,
+                label="ASV position RMSE",
+                color="C3",
+            )
+
+        axs[1].set_xlabel("Time [s]")
+        axs[1].set_ylabel("RMSE [m]")
+        axs[1].set_title("ASV Position RMSE")
+        axs[1].grid(True)
+        axs[1].legend()
+
+        fig.suptitle(f"ESKF RMSE — {self.scenario_name}")
         fig.tight_layout()
         return fig
 
@@ -303,8 +398,60 @@ class PlotterESKFJoint:
         fig.tight_layout()
         return fig
 
+    def to_csv_estimated_values(self, filename: str = "estimated_values.csv"):
+        """Export estimated ASV/ROV states to CSV in save_dir."""
+        if self.save_dir is None or self.x_upds is None or not self.x_upds.values:
+            return
+
+        path = Path(self.save_dir)
+        path.mkdir(parents=True, exist_ok=True)
+
+        times = np.asarray(self.x_upds.times, dtype=float)
+        rov_pos = self._rov_est_pos(self.x_upds)
+        rov_vel = self._rov_est_vel(self.x_upds)
+        asv_pos = self._asv_est_pos(self.x_upds)
+        asv_vel = self._asv_est_vel(self.x_upds)
+
+        out_file = path / filename
+        with out_file.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "time_s",
+                "rov_pos_n",
+                "rov_pos_e",
+                "rov_pos_d",
+                "rov_vel_n",
+                "rov_vel_e",
+                "rov_vel_d",
+                "asv_pos_n",
+                "asv_pos_e",
+                "asv_pos_d",
+                "asv_vel_n",
+                "asv_vel_e",
+                "asv_vel_d",
+            ])
+
+            for i in range(len(times)):
+                writer.writerow([
+                    times[i],
+                    rov_pos[i, 0],
+                    rov_pos[i, 1],
+                    rov_pos[i, 2],
+                    rov_vel[i, 0],
+                    rov_vel[i, 1],
+                    rov_vel[i, 2],
+                    asv_pos[i, 0],
+                    asv_pos[i, 1],
+                    asv_pos[i, 2],
+                    asv_vel[i, 0],
+                    asv_vel[i, 1],
+                    asv_vel[i, 2],
+                ])
+
     def show(self):
+        self.to_csv_estimated_values()
         self._save(self.plot3d(), "3d_trajectory")
+        self._save(self.plot_rmse(), "rmse")
         self._save(self.plot_rov_position(), "rov_position")
         self._save(self.plot_asv_position(), "asv_position")
         self._save(self.plot_rov_position_error(), "rov_position_error")

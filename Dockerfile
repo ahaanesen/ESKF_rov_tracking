@@ -29,7 +29,8 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install --no-cache-dir \
     scipy \    
     matplotlib \    
-    tqdm
+    tqdm \
+    scipy
 
 # Workspace
 WORKDIR /ws

@@ -35,8 +35,7 @@ class ModelIMU:
     accm_correction: "np.ndarray"  # (3,3)
     gyro_correction: "np.ndarray"  # (3,3)
 
-    # g: "np.ndarray" = field(default=np.array([0, 0, 9.82]))
-    g: np.ndarray = field(default_factory=lambda: np.array([0, 0, 9.81]))
+    g: np.ndarray = field(default_factory=lambda: np.array([0, 0, 9.82]))
 
     Q_c: "np.ndarray" = field(init=False, repr=False)
 
@@ -171,9 +170,16 @@ class ModelCV:
 
         F = np.block([[I, dt * I], [Z, I]])  # (6,6)
 
-        Q_pp = (dt**4) / 4.0 * (self.sigma_a**2) * I
-        Q_pv = (dt**3) / 2.0 * (self.sigma_a**2) * I
-        Q_vv = (dt**2) * (self.sigma_a**2) * I
+        # Piecewise Constant Acceleration (PCA) model Q
+        # Q_pp = (dt**4) / 4.0 * (self.sigma_a**2) * I
+        # Q_pv = (dt**3) / 2.0 * (self.sigma_a**2) * I
+        # Q_vv = (dt**2) * (self.sigma_a**2) * I
+
+
+        # Standard CV model Q (matches textbook derivation)
+        Q_pp = (dt**3) / 3.0 * (self.sigma_a**2) * I
+        Q_pv = (dt**2) / 2.0 * (self.sigma_a**2) * I
+        Q_vv = dt      *       (self.sigma_a**2) * I
 
         Q = np.block([[Q_pp, Q_pv], [Q_pv, Q_vv]])  # (6,6)
         return F, Q

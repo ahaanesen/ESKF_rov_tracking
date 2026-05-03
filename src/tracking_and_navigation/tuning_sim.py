@@ -35,8 +35,10 @@ usbl_lever_arm = np.array([0.0, 0.0, 1.2])
 # -----------------------------------------------------------------------------
 # IMU correction matrices (example)
 # -----------------------------------------------------------------------------
-accm_corr = np.diag([1.01, 0.98, 1.02])
-gyro_corr = np.diag([0.99, 1.02, 1.00])
+# accm_corr = np.diag([1.01, 0.98, 1.02])
+# gyro_corr = np.diag([0.99, 1.02, 1.00])
+accm_corr = np.eye(3)
+gyro_corr = np.eye(3)
 
 # -----------------------------------------------------------------------------
 # Models
@@ -53,7 +55,7 @@ imu_sim = ModelIMU(
 )
 
 cv_sim = ModelCV(
-    sigma_a=0.20,
+    sigma_a=0.02,
 )
 
 # -----------------------------------------------------------------------------
@@ -106,7 +108,7 @@ asv_err_init_std_sim = np.repeat(
 
 rov_est_init_nom_sim = RovNominalCV(
     pos=np.array([0.0, 0.0, 5.0]),
-    vel=np.array([0.5, 0.0, 0.0]),
+    vel=np.array([0.0, 0.0, 0.0]),
 )
 
 # ROV CV error stds: [pos(3), vel(3)] => 6

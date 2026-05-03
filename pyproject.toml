@@ -16,4 +16,5 @@ dependencies = [
     "pylint",
     "autopep8",
     "tqdm",
+    "pandas",
 ]

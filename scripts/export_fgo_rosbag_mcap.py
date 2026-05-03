@@ -11,13 +11,20 @@ Writes:
 
 Usage example:
 PYTHONPATH=src:$PYTHONPATH python3 scripts/export_fgo_rosbag_mcap.py \
-    --out /tmp/fgo_dataset \
+    --out /tmp/fgo_dataset_8_var_speed \
     --duration 300 \
     --seed 42 \
+    --imu-rate 100.0 \
+    --gnss-rate 1.0 \
+    --usbl-rate 1.0 \
+    --range-rate 1.0 \
+    --depth-rate 1.0 \
     --datum-lat 60.3913 \
     --datum-lon 5.3221 \
     --datum-h 0.0 \
     --write-acoustic-rx false
+
+Default rates are aligned with tracking_and_navigation/run_simulations.py.
 """
 
 import argparse
@@ -78,15 +85,15 @@ def ned_to_ecef_delta(n: float, e: float, d: float, lat0_rad: float, lon0_rad: f
     sO = math.sin(lon0_rad)
     cO = math.cos(lon0_rad)
 
-    # NED->ECEF rotation is transpose(ECEF->NED)
+    # NED->ECEF
     R = np.array([
         [-sL * cO, -sO, -cL * cO],
         [-sL * sO,  cO, -cL * sO],
         [ cL,       0.0, -sL    ],
     ], dtype=float)
-    # ECEF delta = R^T * ned
+    # ECEF delta = R * ned
     ned = np.array([n, e, d], dtype=float)
-    return R.T @ ned
+    return R @ ned
 
 def ned_to_lla(n: float, e: float, d: float, lat0_deg: float, lon0_deg: float, h0_m: float) -> Tuple[float, float, float]:
     lat0 = math.radians(lat0_deg)
@@ -168,19 +175,19 @@ def main():
     parser.add_argument("--imu-rate", type=float, default=100.0)
     parser.add_argument("--gnss-rate", type=float, default=1.0)
     parser.add_argument("--usbl-rate", type=float, default=1.0)
-    parser.add_argument("--depth-rate", type=float, default=5.0)
+    parser.add_argument("--depth-rate", type=float, default=1.0)
     parser.add_argument("--range-rate", type=float, default=1.0)
 
-    parser.add_argument("--imu-acc-std", type=float, default=0.02)
-    parser.add_argument("--imu-gyro-std", type=float, default=0.002)
-    parser.add_argument("--gnss-std-ne", type=float, default=0.8)
-    parser.add_argument("--gnss-std-d", type=float, default=1.2)
-    parser.add_argument("--usbl-std-rad", type=float, default=0.03)
+    parser.add_argument("--imu-acc-std", type=float, default=1.167e-3)
+    parser.add_argument("--imu-gyro-std", type=float, default=4.36e-5)
+    parser.add_argument("--gnss-std-ne", type=float, default=0.3)
+    parser.add_argument("--gnss-std-d", type=float, default=0.5)
+    parser.add_argument("--usbl-std-rad", type=float, default=0.01745)
     parser.add_argument("--range-std-m", type=float, default=0.5)
-    parser.add_argument("--depth-std-m", type=float, default=0.2)
+    parser.add_argument("--depth-std-m", type=float, default=0.3)
 
-    parser.add_argument("--h-acc-mm", type=int, default=800)
-    parser.add_argument("--v-acc-mm", type=int, default=1200)
+    parser.add_argument("--h-acc-mm", type=int, default=300)
+    parser.add_argument("--v-acc-mm", type=int, default=500)
 
     parser.add_argument("--write-acoustic-rx", type=str, default="false")
     parser.add_argument("--epoch-sec", type=int, default=1700000000)
@@ -205,7 +212,8 @@ def main():
     asv_gt, rov_gt, _imu_gt = generate_trajectories(duration=args.duration, dt=args.dt)
     mg = MeasurementGenerator(asv_gt, rov_gt)
 
-    lever_arm = np.array([0.0, 0.0, 1.5], dtype=float)  # match env.usbl_offset_z default
+    gnss_lever_arm = np.array([0.3, 0.3, 0.1], dtype=float)
+    lever_arm = np.array([0.0, 0.0, 1.2], dtype=float)  # match env.usbl_offset_z default
 
     imu_seq = mg.generate_imu_asv(
         accm_std=args.imu_acc_std,
@@ -215,7 +223,7 @@ def main():
     gnss_seq = mg.generate_gnss_asv(
         std_ne=args.gnss_std_ne,
         std_d=args.gnss_std_d,
-        lever_arm=np.zeros(3),  # keep simple; can set lever arm if desired
+        lever_arm=gnss_lever_arm,
         rate_hz=args.gnss_rate,
     )
     usbl_seq = mg.generate_usbl(
@@ -330,20 +338,24 @@ def main():
 
         elif e.kind == "gnss":
             # z is NED position from generator -> convert to lat/lon/h
-            n = float(e.payload.pos[0]) if hasattr(e.payload, "pos") else float(e.payload.to_array()[0])
-            ee = float(e.payload.pos[1]) if hasattr(e.payload, "pos") else float(e.payload.to_array()[1])
-            d = float(e.payload.pos[2]) if hasattr(e.payload, "pos") else float(e.payload.to_array()[2])
+            ned_pos = meas_as_array(e.payload)
+            n, ee, d = ned_pos[0], ned_pos[1], ned_pos[2]
+            # n = float(e.payload.pos[0]) if hasattr(e.payload, "pos") else float(e.payload.to_array()[0])
+            # ee = float(e.payload.pos[1]) if hasattr(e.payload, "pos") else float(e.payload.to_array()[1])
+            # d = float(e.payload.pos[2]) if hasattr(e.payload, "pos") else float(e.payload.to_array()[2])
 
+            # print(f"[EXPORT GNSS NED] t={e.t:.2f} n={n:.2f} e={ee:.2f} d={d:.2f}")
             lat, lon, h = ned_to_lla(n, ee, d, args.datum_lat, args.datum_lon, args.datum_h)
+            # print(f"[EXPORT GNSS LLA] t={e.t:.2f} lat={lat:.8f} lon={lon:.8f} h={h:.3f}")
 
             m = GNSSMsg()
             m.header = Header()
             m.header.stamp = stamp
             m.header.frame_id = "gnss_link"
 
-            m.lat = float(lat)
-            m.lon = float(lon)
-            m.height = float(h)
+            m.lat = lat
+            m.lon = lon
+            m.height = h
 
             # Required by your callback gate
             m.fix_type = 3
@@ -351,14 +363,14 @@ def main():
 
             # TODO: make sure fgo and message definition agree on accuracy units (mm vs m)
             # # FGO expects mm then divides by 1000.0
-            # m.h_acc = int(args.h_acc_mm)
-            # if hasattr(m, "v_acc"):
-            #     m.v_acc = int(args.v_acc_mm)
+            m.h_acc = args.gnss_std_ne
+            if hasattr(m, "v_acc"):
+                m.v_acc = args.gnss_std_d
 
             # keep units in meters to match message definition in your installed interface
-            m.h_acc = float(args.h_acc_mm) / 1000.0
-            if hasattr(m, "v_acc"):
-                m.v_acc = float(args.v_acc_mm) / 1000.0
+            # m.h_acc = float(args.h_acc_mm) / 1000.0
+            # if hasattr(m, "v_acc"):
+            #     m.v_acc = float(args.v_acc_mm) / 1000.0
 
             writer.write(args.topic_gnss, serialize_message(m), stamp_ns)
 
@@ -380,7 +392,9 @@ def main():
             rng_m = float(rng_arr[0])
             dep_m = float(dep_arr[0])
 
-            t_sent_sec = float(e.t)
+            # Keep acoustic modem timestamps in synchronized absolute time (GNSS/UTC-like),
+            # not local/relative process time.
+            t_sent_sec = float(args.epoch_sec) + float(e.t)
             tof_sec = max(rng_m / args.sound_speed, 0.0)
             t_recv_sec = t_sent_sec + tof_sec
 

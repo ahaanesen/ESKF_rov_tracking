@@ -80,7 +80,7 @@ def run_simulations():
         x_preds=pred_s1,
         z_gnss_asv=z_gnss_tseq,
         z_usbl=z_usbl_tseq,
-        scenario_name="Scenario 1: GNSS + Bearing (Joint)",
+        scenario_name="ESKF - Scenario 1: GNSS + Bearing (Joint)",
         save_dir="plots/tracking_and_navigation/scenario1",
     ).show()
 
@@ -92,7 +92,7 @@ def run_simulations():
         z_gnss_asv=z_gnss_tseq,
         z_usbl=z_usbl_tseq,
         z_range=z_range_tseq,
-        scenario_name="Scenario 2: GNSS + USBL + Range (Joint)",
+        scenario_name="ESKF - Scenario 2: GNSS + USBL + Range",
         save_dir="plots/tracking_and_navigation/scenario2",
     ).show()
 
@@ -105,6 +105,6 @@ def run_simulations():
         z_usbl=z_usbl_tseq,
         z_range=z_range_tseq,
         z_depth=z_depth_tseq,
-        scenario_name="Scenario 3: GNSS + USBL + Range + Depth (Joint)",
+        scenario_name="ESKF - Scenario 3: GNSS + USBL + Range + Depth",
         save_dir="plots/tracking_and_navigation/scenario3",
     ).show()

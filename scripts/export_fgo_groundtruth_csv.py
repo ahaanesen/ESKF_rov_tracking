@@ -4,7 +4,7 @@ Export ASV/ROV ground truth trajectories to CSV for FGO error analysis.
 
 Usage example:
     PYTHONPATH=src:$PYTHONPATH python3 scripts/export_fgo_groundtruth_csv.py \
-  --out-dir /tmp/fgo_same_dataset_gt \
+  --out-dir /tmp/fgo_dataset_8_var_speed_gt \
   --duration 300 \
   --dt 0.1 \
   --seed 42 \
@@ -14,7 +14,7 @@ Usage example:
 Outputs:
   - <out_dir>/asv_ground_truth.csv
   - <out_dir>/rov_ground_truth.csv
-  - <out_dir>/metadata.json
+  - <out_dir>/gt_metadata.json
 """
 
 import argparse
@@ -26,10 +26,22 @@ import numpy as np
 
 from tracking_and_navigation.generate_trajectories import generate_trajectories
 
+
+def sim_time_to_ros_stamp(sim_t: float, epoch_sec: int) -> tuple[int, int]:
+    """Match rosbag exporter stamp conversion exactly."""
+    t = epoch_sec + sim_t
+    sec = int(t)
+    nsec = int((t - sec) * 1e9)
+    return sec, nsec
+
+
+def to_ns(sim_t: float, epoch_sec: int) -> int:
+    """Match rosbag exporter nanosecond conversion exactly."""
+    return int((epoch_sec + sim_t) * 1e9)
+
+
 def yaw_from_rotmat(R_nb: np.ndarray) -> float:
     return float(math.atan2(R_nb[1, 0], R_nb[0, 0]))
-
-
 
 def main():
     p = argparse.ArgumentParser()
@@ -48,7 +60,7 @@ def main():
 
     asv_csv = os.path.join(args.out_dir, "asv_ground_truth.csv")
     rov_csv = os.path.join(args.out_dir, "rov_ground_truth.csv")
-    meta_json = os.path.join(args.out_dir, "metadata.json")
+    meta_json = os.path.join(args.out_dir, "gt_metadata.json")
 
     with open(asv_csv, "w", newline="") as f:
         w = csv.writer(f)
@@ -61,10 +73,10 @@ def main():
         for t, s in asv_tseq.items():
             R_nb = s.ori.as_rotmat()
             yaw = yaw_from_rotmat(R_nb)
-            t_ros = args.epoch_sec + float(t)
-            t_ns = int(t_ros * 1e9)
+            t_ros_sec, t_ros_nsec = sim_time_to_ros_stamp(float(t), args.epoch_sec)
+            t_ns = to_ns(float(t), args.epoch_sec)
             w.writerow([
-                float(t), t_ros, t_ns,
+                float(t), t_ros_sec + t_ros_nsec * 1e-9, t_ns,
                 float(s.pos[0]), float(s.pos[1]), float(s.pos[2]),
                 float(s.vel[0]), float(s.vel[1]), float(s.vel[2]),
                 yaw
@@ -78,10 +90,10 @@ def main():
             "vx_n", "vy_e", "vz_d"
         ])
         for t, s in rov_tseq.items():
-            t_ros = args.epoch_sec + float(t)
-            t_ns = int(t_ros * 1e9)
+            t_ros_sec, t_ros_nsec = sim_time_to_ros_stamp(float(t), args.epoch_sec)
+            t_ns = to_ns(float(t), args.epoch_sec)
             w.writerow([
-                float(t), t_ros, t_ns, int(args.rov_id),
+                float(t), t_ros_sec + t_ros_nsec * 1e-9, t_ns, int(args.rov_id),
                 float(s.pos[0]), float(s.pos[1]), float(s.pos[2]),
                 float(s.vel[0]), float(s.vel[1]), float(s.vel[2]),
             ])
@@ -94,7 +106,12 @@ def main():
             "rov_id": args.rov_id,
             "epoch_sec": args.epoch_sec,
             "frame": "NED",
-            "notes": "t_ros_* aligned with rosbag exporter if epoch_sec matches."
+            "timestamp_alignment": {
+                "t_ros_sec_definition": "epoch_sec + t_sim_sec",
+                "t_ros_ns_definition": "int((epoch_sec + t_sim_sec) * 1e9)",
+                "stamp_split": "sec=int(t), nsec=int((t-sec)*1e9)",
+            },
+            "notes": "For exact alignment, use same duration/dt/seed/epoch_sec as rosbag exporter."
         }, f, indent=2)
 
     print(f"[OK] Wrote {asv_csv}")
