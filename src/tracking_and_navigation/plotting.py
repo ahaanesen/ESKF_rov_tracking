@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from operator import attrgetter
 from pathlib import Path
 import csv
@@ -6,16 +6,18 @@ import csv
 import matplotlib as mpl
 import numpy as np
 from matplotlib import pyplot as plt
+from scipy.stats import chi2
 
 from senfuslib import TimeSequence
 
-from tracking_and_navigation.states import JointEskfState, JointNominalState, AsvNominalState, RovNominalCV
+from tracking_and_navigation.states import JointEskfState, JointNominalState, JointIdx, AsvNominalState, RovNominalCV
 from tracking_and_navigation.measurements import (
     GnssMeasurement,
     UsblMeasurement,
     RangeMeasurement,
     DepthMeasurement,
 )
+from utils.angles import wrap_to_pi
 
 mpl.rcParams["axes.grid"] = True
 mpl.rcParams["legend.loc"] = "lower right"
@@ -70,6 +72,9 @@ class PlotterESKFJoint:
 
     scenario_name: str = "Joint scenario"
     save_dir: str = None
+
+    # z_preds from run_eskf: {sensor: (z_pred_tseq, z_meas_tseq)}
+    z_preds: dict = field(default_factory=dict)
 
     # ------------------------
     # Helpers: extract arrays
@@ -448,6 +453,106 @@ class PlotterESKFJoint:
                     asv_vel[i, 2],
                 ])
 
+    @staticmethod
+    def _chi2_bands(ax, times, dof, alpha=0.95):
+        ci_lo, ci_hi = chi2.interval(alpha, dof)
+        ci_med = chi2.ppf(0.5, dof)
+        ax.axhline(ci_lo,  color="tab:orange", ls="--", alpha=0.7,
+                   label=f"χ²({dof}) {alpha:.0%} CI")
+        ax.axhline(ci_med, color="tab:green",  ls="--", alpha=0.7,
+                   label=f"χ²({dof}) median")
+        ax.axhline(ci_hi,  color="tab:orange", ls="--", alpha=0.7)
+
+    def plot_nees(self):
+        """NEES for ROV position (3 DOF) and ASV position (3 DOF)."""
+        if self.rov_gt is None or self.asv_gt is None or self.x_upds is None:
+            return None
+
+        times, nees_rov, nees_asv = [], [], []
+        for t, x in self.x_upds.items():
+            gt = JointNominalState(
+                asv=self.asv_gt.at_time(t),
+                rov=self.rov_gt.at_time(t),
+            )
+            err_gauss = x.get_err_gauss(gt)
+            err = np.asarray(err_gauss.mean)
+            P = err_gauss.cov
+
+            rov_err = err[JointIdx.ROV_POS]
+            rov_P = P[JointIdx.ROV_POS, JointIdx.ROV_POS]
+            nees_rov.append(float(rov_err @ np.linalg.solve(rov_P, rov_err)))
+
+            asv_err = err[JointIdx.ASV_POS]
+            asv_P = P[JointIdx.ASV_POS, JointIdx.ASV_POS]
+            nees_asv.append(float(asv_err @ np.linalg.solve(asv_P, asv_err)))
+
+            times.append(t)
+
+        times = np.array(times)
+        fig, axs = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
+
+        axs[0].semilogy(times, nees_rov, color="C0", label="NEES")
+        self._chi2_bands(axs[0], times, dof=3)
+        axs[0].set_ylabel("NEES ROV pos (3 DOF)")
+        axs[0].legend()
+
+        axs[1].semilogy(times, nees_asv, color="C3", label="NEES")
+        self._chi2_bands(axs[1], times, dof=3)
+        axs[1].set_ylabel("NEES ASV pos (3 DOF)")
+        axs[1].set_xlabel("Time [s]")
+        axs[1].legend()
+
+        axs[0].set_title(f"{self.scenario_name} — NEES")
+        fig.tight_layout()
+        return fig
+
+    def plot_nis(self):
+        """NIS for each active sensor (GNSS, USBL, range, depth)."""
+        if not self.z_preds:
+            return None
+
+        sensor_cfg = {
+            "gnss":  ("GNSS (3 DOF)",  3,  "C0", False),
+            "usbl":  ("USBL (2 DOF)",  2,  "C4", True),
+            "range": ("Range (1 DOF)", 1,  "C2", False),
+            "depth": ("Depth (1 DOF)", 1,  "C5", False),
+        }
+        active = [(k, *sensor_cfg[k]) for k in sensor_cfg if k in self.z_preds]
+        if not active:
+            return None
+
+        fig, axs = plt.subplots(len(active), 1, sharex=True,
+                                figsize=(10, 2.5 * len(active)))
+        if len(active) == 1:
+            axs = [axs]
+
+        for ax, (key, label, dof, color, wrap_az) in zip(axs, active):
+            z_pred_tseq, z_meas_tseq = self.z_preds[key]
+            times, nis_vals = [], []
+            for t, z_pred in z_pred_tseq.items():
+                if t not in z_meas_tseq:
+                    continue
+                z_p = np.asarray(z_pred.mean).reshape(-1)
+                z_m = np.asarray(z_meas_tseq.get_t(t)).reshape(-1)
+                innov = z_m - z_p
+                if wrap_az:
+                    innov[0] = wrap_to_pi(innov[0])
+                nis = float(innov @ np.linalg.solve(z_pred.cov, innov))
+                times.append(t)
+                nis_vals.append(nis)
+
+            times = np.array(times)
+            ax.semilogy(times, nis_vals, ".", color=color, markersize=4,
+                        label="NIS")
+            self._chi2_bands(ax, times, dof=dof)
+            ax.set_ylabel(label)
+            ax.legend()
+
+        axs[0].set_title(f"{self.scenario_name} — NIS")
+        axs[-1].set_xlabel("Time [s]")
+        fig.tight_layout()
+        return fig
+
     def show(self):
         self.to_csv_estimated_values()
         self._save(self.plot3d(), "3d_trajectory")
@@ -455,6 +560,8 @@ class PlotterESKFJoint:
         self._save(self.plot_rov_position(), "rov_position")
         self._save(self.plot_asv_position(), "asv_position")
         self._save(self.plot_rov_position_error(), "rov_position_error")
+        self._save(self.plot_nees(), "nees")
+        self._save(self.plot_nis(), "nis")
         self._save(self.plot_usbl_measurements(), "usbl")
         self._save(self.plot_range_measurements(), "range")
         plt.show(block=True)

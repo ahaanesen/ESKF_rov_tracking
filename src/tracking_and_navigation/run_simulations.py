@@ -14,6 +14,8 @@ from tracking_and_navigation.tuning_sim import (
     imu_sim,      # recommend adding to tuning_sim: IMU noise params for measurement generation
 )
 
+
+
 def run_simulations():
 
     # 1) Ground truth
@@ -43,7 +45,7 @@ def run_simulations():
 
     # 3) Run scenarios (each scenario includes GNSS in the measurement list)
     print("Running tracking_and_navigation Scenario 1: GNSS + USBL")
-    upd_s1, pred_s1 = run_eskf_s1(
+    upd_s1, pred_s1, zp_s1 = run_eskf_s1(
         eskf=eskf_sim,
         x_init=x_init_sim,
         z_imu_tseq=z_imu_tseq,
@@ -52,7 +54,7 @@ def run_simulations():
     )
 
     print("Running tracking_and_navigation Scenario 2: GNSS + USBL + Range")
-    upd_s2, pred_s2 = run_eskf_s2(
+    upd_s2, pred_s2, zp_s2 = run_eskf_s2(
         eskf=eskf_sim,
         x_init=x_init_sim,
         z_imu_tseq=z_imu_tseq,
@@ -62,7 +64,7 @@ def run_simulations():
     )
 
     print("Running tracking_and_navigation Scenario 3: GNSS + USBL + Range + Depth")
-    upd_s3, pred_s3 = run_eskf_s3(
+    upd_s3, pred_s3, zp_s3 = run_eskf_s3(
         eskf=eskf_sim,
         x_init=x_init_sim,
         z_imu_tseq=z_imu_tseq,
@@ -73,6 +75,7 @@ def run_simulations():
     )
 
     # 4) Plot (joint plotter)
+    save_dir = "plots/track_and_nav_8/"
     PlotterESKFJoint(
         rov_gt=rov_gt_tseq,
         asv_gt=asv_gt_tseq,
@@ -80,8 +83,9 @@ def run_simulations():
         x_preds=pred_s1,
         z_gnss_asv=z_gnss_tseq,
         z_usbl=z_usbl_tseq,
+        z_preds=zp_s1,
         scenario_name="ESKF - Scenario 1: GNSS + Bearing (Joint)",
-        save_dir="plots/tracking_and_navigation/scenario1",
+        save_dir=save_dir + "scenario1",
     ).show()
 
     PlotterESKFJoint(
@@ -92,8 +96,9 @@ def run_simulations():
         z_gnss_asv=z_gnss_tseq,
         z_usbl=z_usbl_tseq,
         z_range=z_range_tseq,
+        z_preds=zp_s2,
         scenario_name="ESKF - Scenario 2: GNSS + USBL + Range",
-        save_dir="plots/tracking_and_navigation/scenario2",
+        save_dir=save_dir + "scenario2",
     ).show()
 
     PlotterESKFJoint(
@@ -105,6 +110,7 @@ def run_simulations():
         z_usbl=z_usbl_tseq,
         z_range=z_range_tseq,
         z_depth=z_depth_tseq,
+        z_preds=zp_s3,
         scenario_name="ESKF - Scenario 3: GNSS + USBL + Range + Depth",
-        save_dir="plots/tracking_and_navigation/scenario3",
+        save_dir=save_dir + "scenario3",
     ).show()

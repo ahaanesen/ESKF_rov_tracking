@@ -35,7 +35,7 @@ def _run_preint_scenario(
     z_gnss_tseq: TimeSequence[GnssMeasurement],
     other_meas_list,  # sorted [(t, z)] of non-GNSS measurements
     desc: str,
-) -> tuple[TimeSequence[JointEskfState], TimeSequence[JointEskfState]]:
+):
     """
     GNSS-driven loop with IMU preintegration.
 
@@ -47,6 +47,9 @@ def _run_preint_scenario(
     Between GNSS events all IMU samples are collected and passed to
     eskf.preintegrate_imu(), which composes F and Q along the nominal
     trajectory and applies a single 21×21 covariance update.
+
+    Returns (upd_tseq, pred_tseq, z_preds) where z_preds is a dict mapping
+    sensor name to (z_pred_tseq, z_meas_tseq) for NIS computation.
     """
     imu_list = list(z_imu_tseq.items())
     imu_len = len(imu_list)
@@ -61,6 +64,12 @@ def _run_preint_scenario(
 
     upd_tseq = TimeSequence()
     pred_tseq = TimeSequence([(t_prev, x_init)])
+
+    # Collect (t_epoch, z_pred_gauss, z_meas) for each sensor
+    _gnss_buf: list[tuple] = []
+    _usbl_buf: list[tuple] = []
+    _range_buf: list[tuple] = []
+    _depth_buf: list[tuple] = []
 
     for t_gnss, z_gnss in tqdm(z_gnss_tseq.items(), desc=desc):
         if t_gnss < t_prev:
@@ -97,19 +106,39 @@ def _run_preint_scenario(
         x_cur = x_pred
         for _t, z_m in buffered:
             if isinstance(z_m, UsblMeasurement):
-                x_cur, _ = eskf.update_from_usbl(x_cur, z_m)
+                x_cur, z_pred_m = eskf.update_from_usbl(x_cur, z_m)
+                _usbl_buf.append((_t, z_pred_m, z_m))
             elif isinstance(z_m, RangeMeasurement):
-                x_cur, _ = eskf.update_from_range(x_cur, z_m)
+                x_cur, z_pred_m = eskf.update_from_range(x_cur, z_m)
+                _range_buf.append((_t, z_pred_m, z_m))
             elif isinstance(z_m, DepthMeasurement):
-                x_cur, _ = eskf.update_from_depth(x_cur, z_m)
+                x_cur, z_pred_m = eskf.update_from_depth(x_cur, z_m)
+                _depth_buf.append((_t, z_pred_m, z_m))
 
         # 4) GNSS update last
-        x_upd, _ = eskf.update_from_gnss_asv(x_cur, z_gnss)
+        x_upd, z_pred_gnss = eskf.update_from_gnss_asv(x_cur, z_gnss)
+        _gnss_buf.append((t_gnss, z_pred_gnss, z_gnss))
         if t_gnss not in upd_tseq:
             upd_tseq.insert(t_gnss, x_upd)
         x_prev = x_upd
 
-    return upd_tseq, pred_tseq
+    def _to_tseqs(lst):
+        zp = TimeSequence()
+        zm = TimeSequence()
+        for t, z_pred, z_meas in lst:
+            if t not in zp:
+                zp.insert(t, z_pred)
+                zm.insert(t, z_meas)
+        return zp, zm
+
+    z_preds = {k: _to_tseqs(v) for k, v in [
+        ('gnss',  _gnss_buf),
+        ('usbl',  _usbl_buf),
+        ('range', _range_buf),
+        ('depth', _depth_buf),
+    ] if v}
+
+    return upd_tseq, pred_tseq, z_preds
 
 
 # -----------------------------------------------------------------------------
@@ -121,7 +150,7 @@ def run_eskf_s1(
     z_imu_tseq: TimeSequence[ImuMeasurement],
     z_gnss_tseq: TimeSequence[GnssMeasurement],
     z_usbl_tseq: TimeSequence[UsblMeasurement],
-) -> tuple[TimeSequence[JointEskfState], TimeSequence[JointEskfState]]:
+):
     other = _merge_other_measurements(z_usbl_tseq)
     return _run_preint_scenario(
         eskf=eskf,
@@ -143,7 +172,7 @@ def run_eskf_s2(
     z_gnss_tseq: TimeSequence[GnssMeasurement],
     z_usbl_tseq: TimeSequence[UsblMeasurement],
     z_range_tseq: TimeSequence[RangeMeasurement],
-) -> tuple[TimeSequence[JointEskfState], TimeSequence[JointEskfState]]:
+):
     other = _merge_other_measurements(z_usbl_tseq, z_range_tseq)
     return _run_preint_scenario(
         eskf=eskf,
@@ -166,7 +195,7 @@ def run_eskf_s3(
     z_usbl_tseq: TimeSequence[UsblMeasurement],
     z_range_tseq: TimeSequence[RangeMeasurement],
     z_depth_tseq: TimeSequence[DepthMeasurement],
-) -> tuple[TimeSequence[JointEskfState], TimeSequence[JointEskfState]]:
+):
     other = _merge_other_measurements(z_usbl_tseq, z_range_tseq, z_depth_tseq)
     return _run_preint_scenario(
         eskf=eskf,
