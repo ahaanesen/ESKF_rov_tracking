@@ -34,9 +34,12 @@ TRAJECTORY_TYPE = TrajectoryType.FIGURE_8
 #   SOUND_SPEED    — acoustic propagation speed [m/s]
 #
 ACOUSTIC_DELAY = True
-JITTER_STD     = 0.05    # ±50 ms 1-sigma
-MISS_PROB      = 0.10    # 10 % dropout
-SOUND_SPEED    = 1500.0  # m/s
+# JITTER_STD     = 0.05    # ±50 ms 1-sigma
+# MISS_PROB      = 0.10    # 10 % dropout
+# SOUND_SPEED    = 1500.0  # m/s
+JITTER_STD     = 0.0
+MISS_PROB      = 0.0
+SOUND_SPEED    = 1500.0
 
 
 def run_simulations():
@@ -87,6 +90,7 @@ def run_simulations():
     )
 
     traj_name = TRAJECTORY_TYPE.value
+    save_dir = f"plots/{traj_name}_delay{ACOUSTIC_DELAY}_jitter{JITTER_STD}_miss{MISS_PROB}"
 
     # 3) Run scenarios
     print(f"[{traj_name}] Scenario 1: GNSS + Bearing only")
@@ -128,7 +132,7 @@ def run_simulations():
         z_gnss_asv=z_gnss_tseq,
         z_usbl=z_usbl_tseq,
         scenario_name=f"[{traj_name}] Scenario 1: Bearing-only",
-        save_dir=f"plots/{traj_name}/scenario1",
+        save_dir=f"{save_dir}/scenario1",
     ).show()
 
     PlotterESKFJoint(
@@ -140,7 +144,7 @@ def run_simulations():
         z_usbl=z_usbl_tseq,
         z_range=z_range_tseq,
         scenario_name=f"[{traj_name}] Scenario 2: Bearing + Range",
-        save_dir=f"plots/{traj_name}/scenario2",
+        save_dir=f"{save_dir}/scenario2",
     ).show()
 
     PlotterESKFJoint(
@@ -153,5 +157,5 @@ def run_simulations():
         z_range=z_range_tseq,
         z_depth=z_depth_tseq,
         scenario_name=f"[{traj_name}] Scenario 3: Bearing + Range + Depth",
-        save_dir=f"plots/{traj_name}/scenario3",
+        save_dir=f"{save_dir}/scenario3",
     ).show()

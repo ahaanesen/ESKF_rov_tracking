@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 from senfuslib import MultiVarGauss
 
@@ -85,9 +87,9 @@ depth_sim = SensorDepth_ROV(
 # Initial estimate (Joint state)
 # -----------------------------------------------------------------------------
 asv_est_init_nom_sim = AsvNominalState(
-    pos=np.array([50.0, 0.0, 0.0]),
+    pos=np.array([60.0, 0.0, 0.0]),
     vel=np.array([0.0, 0.0, 0.0]),
-    ori=RotationQuaterion.from_euler([0.0, 0.0, 0.0]),
+    ori=RotationQuaterion.from_euler([0.0, 0.0, math.pi / 2]),
     accm_bias=np.zeros(3),
     gyro_bias=np.zeros(3),
 )
