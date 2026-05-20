@@ -16,18 +16,18 @@ The resulting folder has the structure expected by the other ROS 2 node, e.g.:
 Usage example:
 
 PYTHONPATH=src:$PYTHONPATH python3 export_fgo_dataset_combined.py \
-    --out /tmp/fig8_aco_delay_no_loss \
+    --out /tmp/circ_no_delay_no_loss \
     --duration 300 \
-    --dt 0.1 \
+    --dt 0.01 \
     --seed 42 \
-    --trajectory-type figure_8 \
+    --trajectory-type circular \
     --rov-id 1 \
     --epoch-sec 1700000000 \
     --datum-lat 60.3913 \
     --datum-lon 5.3221 \
     --datum-h 0.0 \
     --write-acoustic-rx false \
-    --acoustic-delay true \
+    --acoustic-delay false \
     --acoustic-jitter-std 0.0 \
     --usbl-miss-prob 0.0 \
     --range-miss-prob 0.0 \
@@ -35,7 +35,7 @@ PYTHONPATH=src:$PYTHONPATH python3 export_fgo_dataset_combined.py \
     --overwrite
 
 Exit docker enviroment to copy from docker/tmp to local folder:
-docker cp eskf_humble:/tmp/fig8_aco_delay_no_loss ./datasets/figure8_aco_delay_no_loss
+docker cp eskf_humble:/tmp/circ_no_delay_no_loss ./datasets/circular_no_delay_no_loss
 """
 
 import argparse

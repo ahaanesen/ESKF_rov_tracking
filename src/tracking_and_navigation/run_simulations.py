@@ -23,7 +23,7 @@ from tracking_and_navigation.tuning_sim import (
 #   TrajectoryType.FIGURE_8   — lemniscate ASV, curved ROV (better bearing geometry)
 #   TrajectoryType.SINUSOIDAL — S-curve ASV, maneuvering ROV (hardest for ESKF)
 #
-TRAJECTORY_TYPE = TrajectoryType.FIGURE_8
+TRAJECTORY_TYPE = TrajectoryType.CIRCULAR
 
 #
 # Measurement realism settings (all False/0 = ideal, synchronous measurements):
@@ -33,7 +33,7 @@ TRAJECTORY_TYPE = TrajectoryType.FIGURE_8
 #   MISS_PROB      — probability of dropping each acoustic measurement [0, 1]
 #   SOUND_SPEED    — acoustic propagation speed [m/s]
 #
-ACOUSTIC_DELAY = True
+ACOUSTIC_DELAY = False
 # JITTER_STD     = 0.05    # ±50 ms 1-sigma
 # MISS_PROB      = 0.10    # 10 % dropout
 # SOUND_SPEED    = 1500.0  # m/s
@@ -47,7 +47,7 @@ def run_simulations():
     # 1) Ground truth
     asv_gt_tseq, rov_gt_tseq, _ = generate_trajectories(
         duration=300,
-        dt=0.1,
+        dt=0.01,
         trajectory_type=TRAJECTORY_TYPE,
     )
 
@@ -90,7 +90,7 @@ def run_simulations():
     )
 
     traj_name = TRAJECTORY_TYPE.value
-    save_dir = f"plots/{traj_name}_delay{ACOUSTIC_DELAY}_jitter{JITTER_STD}_miss{MISS_PROB}"
+    save_dir = f"plots/{traj_name}_dt0_01_cv_020_imu_corr_ideal_meas"
 
     # 3) Run scenarios
     print(f"[{traj_name}] Scenario 1: GNSS + Bearing only")
