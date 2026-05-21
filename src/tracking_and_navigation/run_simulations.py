@@ -90,7 +90,7 @@ def run_simulations():
     )
 
     traj_name = TRAJECTORY_TYPE.value
-    save_dir = f"plots/{traj_name}_dt0_01_cv_020_imu_corr_ideal_meas"
+    save_dir = f"plots/{traj_name}_dt0_01_cv_020_imu_corr_ideal_meas_plots2"
 
     # 3) Run scenarios
     print(f"[{traj_name}] Scenario 1: GNSS + Bearing only")

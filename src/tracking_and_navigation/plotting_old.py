@@ -1,0 +1,898 @@
+# from dataclasses import dataclass
+# from operator import attrgetter
+# from pathlib import Path
+
+# import matplotlib as mpl
+# import numpy as np
+# from matplotlib import pyplot as plt
+
+# from senfuslib import TimeSequence
+
+# from tracking_and_navigation.states import JointEskfState, JointNominalState, AsvNominalState, RovNominalCV
+# from tracking_and_navigation.measurements import (
+#     GnssMeasurement,
+#     UsblMeasurement,
+#     RangeMeasurement,
+#     DepthMeasurement,
+# )
+
+# mpl.rcParams["axes.grid"] = True
+# mpl.rcParams["legend.loc"] = "lower right"
+# mpl.rcParams["legend.fontsize"] = "small"
+
+
+# def _extract_pos(tseq: TimeSequence, getter) -> np.ndarray:
+#     return np.stack([getter(v) for v in tseq.values])
+
+
+# @dataclass
+# class PlotterESKFJoint:
+#     # Ground truth and estimates
+#     rov_gt: TimeSequence[RovNominalCV]          # ROV ground truth (CV)
+#     asv_gt: TimeSequence[AsvNominalState]       # ASV ground truth (nominal with pos/vel/ori/bias)
+
+#     x_upds: TimeSequence[JointEskfState]        # joint updated states
+#     x_preds: TimeSequence[JointEskfState]       # joint predicted states
+
+#     # Measurements (optional)
+#     z_gnss_asv: TimeSequence[GnssMeasurement] = None
+#     z_usbl:     TimeSequence[UsblMeasurement] = None
+#     z_range:    TimeSequence[RangeMeasurement] = None
+#     z_depth:    TimeSequence[DepthMeasurement] = None
+
+#     scenario_name: str = "Joint scenario"
+#     save_dir: str = None
+
+#     # ------------------------
+#     # Helpers: extract arrays
+#     # ------------------------
+#     def _rov_est_pos(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+#         return np.stack([v.nom.rov.pos for v in tseq.values])
+
+#     def _rov_est_vel(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+#         return np.stack([v.nom.rov.vel for v in tseq.values])
+
+#     def _asv_est_pos(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+#         return np.stack([v.nom.asv.pos for v in tseq.values])
+
+#     def _asv_est_vel(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+#         return np.stack([v.nom.asv.vel for v in tseq.values])
+
+#     def _rov_est_std(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+#         """
+#         3-sigma std on ROV position from joint covariance.
+#         Joint error layout (from your JointIdx):
+#           ASV: 0..14
+#           ROV: 15..20, where ROV pos is 15..17
+#         """
+#         stds = []
+#         for v in tseq.values:
+#             P = v.err.cov
+#             rov_pos_var = np.diag(P)[15:18]
+#             stds.append(3.0 * np.sqrt(rov_pos_var))
+#         return np.stack(stds)
+
+#     def _asv_est_std(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+#         """3-sigma std on ASV position from joint covariance (ASV pos is 0..2)."""
+#         stds = []
+#         for v in tseq.values:
+#             P = v.err.cov
+#             asv_pos_var = np.diag(P)[0:3]
+#             stds.append(3.0 * np.sqrt(asv_pos_var))
+#         return np.stack(stds)
+
+#     # ------------------------
+#     # Plots
+#     # ------------------------
+#     def plot3d(self):
+#         fig = plt.figure(figsize=(10, 8))
+#         ax = fig.add_subplot(111, projection="3d")
+
+#         # ROV GT
+#         if self.rov_gt is not None:
+#             gt_pos = _extract_pos(self.rov_gt, attrgetter("pos"))
+#             ax.plot(*gt_pos.T, label="ROV ground truth", linestyle="--", color="C1", alpha=0.8)
+#             ax.scatter(*gt_pos[0], marker="x", color="red", s=60, label="ROV start")
+
+#         # ROV estimate
+#         if self.x_upds is not None and self.x_upds.values:
+#             est_pos = self._rov_est_pos(self.x_upds)
+#             ax.plot(*est_pos.T, label="ROV estimate (upd)", color="C0", alpha=0.8)
+
+#         # ASV GT
+#         if self.asv_gt is not None:
+#             asv_pos = _extract_pos(self.asv_gt, attrgetter("pos"))
+#             ax.plot(*asv_pos.T, label="ASV ground truth", color="C2", linestyle="-.", alpha=0.6)
+#             ax.scatter(*asv_pos[0], marker="^", color="C2", s=60)
+
+#         # ASV estimate
+#         if self.x_upds is not None and self.x_upds.values:
+#             asv_est_pos = self._asv_est_pos(self.x_upds)
+#             ax.plot(*asv_est_pos.T, label="ASV estimate (upd)", color="C3", alpha=0.8)
+
+#         # Critical fixes for z-axis visibility
+#         ax.set_xlabel("North [m]", labelpad=10)
+#         ax.set_ylabel("East [m]", labelpad=10)
+#         ax.set_zlabel("Down [m]", labelpad=10)
+
+#         ax.invert_zaxis()  # Invert z-axis to have depth increasing downwards
+        
+#         # Force the z-axis to be visible by adjusting viewing angle
+#         ax.view_init(elev=15, azim=-110)  # More extreme angle
+        
+#         # Ensure tight aspect ratio doesn't hide axes
+#         ax.set_box_aspect(None)  # Auto aspect
+        
+#         # Make the panes transparent so axes show through
+#         ax.xaxis.pane.set_edgecolor('black')
+#         ax.yaxis.pane.set_edgecolor('black')
+#         ax.zaxis.pane.set_edgecolor('black')
+#         ax.xaxis.pane.set_alpha(0.1)
+#         ax.yaxis.pane.set_alpha(0.1)
+#         ax.zaxis.pane.set_alpha(0.1)
+        
+#         # Force grid on all axes
+#         ax.grid(True)
+        
+#         ax.set_title(f"{self.scenario_name} — 3D Trajectories")
+#         ax.legend(loc='upper right')
+        
+#         fig.tight_layout()
+#         return fig
+
+#     def plot_rov_position(self):
+#         fig, axs = plt.subplots(3, 1, sharex=True, figsize=(10, 8))
+#         labels = ["North [m]", "East [m]", "Down [m]"]
+
+#         times_upd = np.array(self.x_upds.times)
+#         est_pos = self._rov_est_pos(self.x_upds)
+#         std3 = self._rov_est_std(self.x_upds)
+
+#         for i, (ax, lbl) in enumerate(zip(axs, labels)):
+#             # GT
+#             if self.rov_gt is not None:
+#                 gt_times = np.array(self.rov_gt.times)
+#                 gt_pos = _extract_pos(self.rov_gt, attrgetter("pos"))
+#                 ax.plot(gt_times, gt_pos[:, i], label="GT", linestyle="--", color="C1", alpha=0.8)
+
+#             # Est + band
+#             ax.plot(times_upd, est_pos[:, i], label="Est", color="C0")
+#             ax.fill_between(
+#                 times_upd,
+#                 est_pos[:, i] - std3[:, i],
+#                 est_pos[:, i] + std3[:, i],
+#                 alpha=0.2,
+#                 color="C0",
+#                 label="±3σ",
+#             )
+
+#             # Depth meas only on Down
+#             if i == 2 and self.z_depth is not None:
+#                 depth_times = np.array(self.z_depth.times)
+#                 depth_vals = np.array([float(v[0]) for v in self.z_depth.values])
+#                 ax.scatter(depth_times, depth_vals, s=8, color="C3", alpha=0.5, label="Depth meas", zorder=5)
+
+#             ax.set_ylabel(lbl)
+#             ax.legend()
+
+#         axs[0].set_title(f"{self.scenario_name} — ROV Position")
+#         axs[-1].set_xlabel("Time [s]")
+#         fig.tight_layout()
+#         return fig
+
+#     def plot_asv_position(self):
+#         fig, axs = plt.subplots(3, 1, sharex=True, figsize=(10, 8))
+#         labels = ["North [m]", "East [m]", "Down [m]"]
+
+#         times_upd = np.array(self.x_upds.times)
+#         est_pos = self._asv_est_pos(self.x_upds)
+#         std3 = self._asv_est_std(self.x_upds)
+
+#         # Precompute GNSS arrays once (correctly)
+#         if self.z_gnss_asv is not None:
+#             gnss_times = np.array(self.z_gnss_asv.times)
+#             gnss_pos = np.stack([np.asarray(m.pos, dtype=float).reshape(3) for m in self.z_gnss_asv.values])  # (N,3)
+#         else:
+#             gnss_times, gnss_pos = None, None
+
+#         for i, (ax, lbl) in enumerate(zip(axs, labels)):
+#             if self.asv_gt is not None:
+#                 gt_times = np.array(self.asv_gt.times)
+#                 gt_pos = _extract_pos(self.asv_gt, attrgetter("pos"))
+#                 ax.plot(gt_times, gt_pos[:, i], label="GT", linestyle="--", color="C2", alpha=0.8)
+
+            
+#             if gnss_pos is not None:
+#                 ax.scatter(
+#                     gnss_times,
+#                     gnss_pos[:, i],
+#                     s=10,
+#                     color="C4",
+#                     alpha=0.4,
+#                     label="GNSS meas" if i == 0 else None,  # avoid repeated legend entries
+#                     zorder=5,
+#                 )
+#             # if self.z_gnss_asv is not None:
+#             #     gnss_times = np.array(self.z_gnss_asv.times)
+#             #     gnss_pos = np.array([float(v[0]) for v in self.z_gnss_asv.values]) # (N,3)
+#             #     ax.scatter(gnss_times, gnss_pos, s=10, color="C4", alpha=0.4, label="GNSS meas") #  zorder=5
+
+#             ax.plot(times_upd, est_pos[:, i], label="Est", color="C3")
+#             ax.fill_between(
+#                 times_upd,
+#                 est_pos[:, i] - std3[:, i],
+#                 est_pos[:, i] + std3[:, i],
+#                 alpha=0.2,
+#                 color="C3",
+#                 label="±3σ",
+#             )
+
+#             ax.set_ylabel(lbl)
+#             ax.legend()
+
+#         axs[0].set_title(f"{self.scenario_name} — ASV Position")
+#         axs[-1].set_xlabel("Time [s]")
+#         fig.tight_layout()
+#         return fig
+
+#     def plot_usbl_measurements(self):
+#         if self.z_usbl is None:
+#             return None
+#         fig, axs = plt.subplots(2, 1, sharex=True, figsize=(10, 5))
+#         times = np.array(self.z_usbl.times)
+#         azi = np.array([float(v[0]) for v in self.z_usbl.values])
+#         elev = np.array([float(v[1]) for v in self.z_usbl.values])
+
+#         axs[0].plot(times, np.rad2deg(azi), ".", color="C4", markersize=4)
+#         axs[0].set_ylabel("Azimuth [deg]")
+#         axs[1].plot(times, np.rad2deg(elev), ".", color="C5", markersize=4)
+#         axs[1].set_ylabel("Elevation [deg]")
+#         axs[0].set_title(f"{self.scenario_name} — USBL Measurements")
+#         axs[-1].set_xlabel("Time [s]")
+#         fig.tight_layout()
+#         return fig
+
+#     def plot_range_measurements(self):
+#         if self.z_range is None:
+#             return None
+#         fig, ax = plt.subplots(figsize=(10, 3))
+#         times = np.array(self.z_range.times)
+#         ranges = np.array([float(v[0]) for v in self.z_range.values])
+
+#         # True range for reference (use lever arm = 0 here unless you want to include it)
+#         if self.rov_gt is not None and self.asv_gt is not None:
+#             true_ranges = []
+#             for t in times:
+#                 rov = self.rov_gt.at_time(t)
+#                 asv = self.asv_gt.at_time(t)
+#                 true_ranges.append(np.linalg.norm(np.asarray(rov.pos) - np.asarray(asv.pos)))
+#             ax.plot(times, true_ranges, label="True (ASV pos to ROV pos)", linestyle="--", color="C1", alpha=0.8)
+
+#         ax.plot(times, ranges, ".", color="C4", markersize=4, label="Measured")
+#         ax.set_ylabel("Range [m]")
+#         ax.set_xlabel("Time [s]")
+#         ax.set_title(f"{self.scenario_name} — Range Measurements")
+#         ax.legend()
+#         fig.tight_layout()
+#         return fig
+
+#     def plot_rov_position_error(self):
+#         """ROV position error (est - gt) over time with ±3σ from joint covariance."""
+#         if self.rov_gt is None:
+#             return None
+
+#         fig, axs = plt.subplots(3, 1, sharex=True, figsize=(10, 7))
+#         labels = ["err N [m]", "err E [m]", "err D [m]"]
+
+#         times_upd = np.array(self.x_upds.times)
+#         est_pos = self._rov_est_pos(self.x_upds)
+#         std3 = self._rov_est_std(self.x_upds)
+
+#         gt_pos_at_upd = np.stack([self.rov_gt.at_time(t).pos for t in times_upd])
+#         error = est_pos - gt_pos_at_upd
+
+#         for i, (ax, lbl) in enumerate(zip(axs, labels)):
+#             ax.plot(times_upd, error[:, i], color="C0", label="error")
+#             ax.fill_between(times_upd, -std3[:, i], std3[:, i], alpha=0.2, color="C0", label="±3σ")
+#             ax.axhline(0.0, color="k", linewidth=0.5)
+#             ax.set_ylabel(lbl)
+#             ax.legend()
+
+#         axs[0].set_title(f"{self.scenario_name} — ROV Position Error")
+#         axs[-1].set_xlabel("Time [s]")
+#         fig.tight_layout()
+#         return fig
+
+#     def show(self):
+#         self._save(self.plot3d(), "3d_trajectory")
+#         self._save(self.plot_rov_position(), "rov_position")
+#         self._save(self.plot_asv_position(), "asv_position")
+#         self._save(self.plot_rov_position_error(), "rov_position_error")
+#         self._save(self.plot_usbl_measurements(), "usbl")
+#         self._save(self.plot_range_measurements(), "range")
+#         plt.show(block=True)
+
+#     def _save(self, fig, name: str):
+#         if fig is None:
+#             return
+#         if self.save_dir is None:
+#             return
+#         path = Path(self.save_dir)
+#         path.mkdir(parents=True, exist_ok=True)
+#         fig.savefig(path / f"{name}.png", dpi=150, bbox_inches="tight")
+from dataclasses import dataclass, field
+from operator import attrgetter
+from pathlib import Path
+import csv
+
+import matplotlib as mpl
+import numpy as np
+from matplotlib import pyplot as plt
+from scipy.stats import chi2
+
+from senfuslib import TimeSequence
+
+from tracking_and_navigation.states import JointEskfState, JointNominalState, JointIdx, AsvNominalState, RovNominalCV
+from tracking_and_navigation.measurements import (
+    GnssMeasurement,
+    UsblMeasurement,
+    RangeMeasurement,
+    DepthMeasurement,
+)
+from utils.angles import wrap_to_pi
+
+mpl.rcParams["axes.grid"] = True
+mpl.rcParams["legend.loc"] = "lower right"
+mpl.rcParams["legend.fontsize"] = "small"
+
+
+def _extract_pos(tseq: TimeSequence, getter) -> np.ndarray:
+    return np.stack([getter(v) for v in tseq.values])
+
+def _interp(t_src: np.ndarray, x_src: np.ndarray, t_tgt: np.ndarray) -> np.ndarray:
+    """
+    Interpolate vector-valued time series.
+    t_src: (N,)
+    x_src: (N, d)
+    t_tgt: (M,)
+    returns: (M, d)
+    """
+    x_i = np.zeros((len(t_tgt), x_src.shape[1]))
+    for k in range(x_src.shape[1]):
+        x_i[:, k] = np.interp(t_tgt, t_src, x_src[:, k])
+    return x_i
+
+
+def _rmse(gt: np.ndarray, est: np.ndarray):
+    """
+    Per-time-step position RMSE.
+    gt, est: (N, 3)
+    returns:
+      rmse: (N,)
+      err:  (N, 3)
+    """
+    err = est - gt
+    rmse = np.sqrt(np.mean(err**2, axis=1))
+    return rmse, err
+
+
+
+@dataclass
+class PlotterESKFJoint:
+    # Ground truth and estimates
+    rov_gt: TimeSequence[RovNominalCV]          # ROV ground truth (CV)
+    asv_gt: TimeSequence[AsvNominalState]       # ASV ground truth (nominal with pos/vel/ori/bias)
+
+    x_upds: TimeSequence[JointEskfState]        # joint updated states
+    x_preds: TimeSequence[JointEskfState]       # joint predicted states
+
+    # Measurements (optional)
+    z_gnss_asv: TimeSequence[GnssMeasurement] = None
+    z_usbl:     TimeSequence[UsblMeasurement] = None
+    z_range:    TimeSequence[RangeMeasurement] = None
+    z_depth:    TimeSequence[DepthMeasurement] = None
+
+    scenario_name: str = "Joint scenario"
+    save_dir: str = None
+
+    # z_preds from run_eskf: {sensor: (z_pred_tseq, z_meas_tseq)}
+    z_preds: dict = field(default_factory=dict)
+
+    # ------------------------
+    # Helpers: extract arrays
+    # ------------------------
+    def _rov_est_pos(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+        return np.stack([v.nom.rov.pos for v in tseq.values])
+
+    def _rov_est_vel(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+        return np.stack([v.nom.rov.vel for v in tseq.values])
+
+    def _asv_est_pos(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+        return np.stack([v.nom.asv.pos for v in tseq.values])
+
+    def _asv_est_vel(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+        return np.stack([v.nom.asv.vel for v in tseq.values])
+
+    def _rov_est_std(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+        """
+        3-sigma std on ROV position from joint covariance.
+        Joint error layout (from your JointIdx):
+          ASV: 0..14
+          ROV: 15..20, where ROV pos is 15..17
+        """
+        stds = []
+        for v in tseq.values:
+            P = v.err.cov
+            rov_pos_var = np.diag(P)[15:18]
+            stds.append(3.0 * np.sqrt(rov_pos_var))
+        return np.stack(stds)
+
+    def _asv_est_std(self, tseq: TimeSequence[JointEskfState]) -> np.ndarray:
+        """3-sigma std on ASV position from joint covariance (ASV pos is 0..2)."""
+        stds = []
+        for v in tseq.values:
+            P = v.err.cov
+            asv_pos_var = np.diag(P)[0:3]
+            stds.append(3.0 * np.sqrt(asv_pos_var))
+        return np.stack(stds)
+
+    # ------------------------
+    # Plots
+    # ------------------------
+    def plot3d(self):
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection="3d")
+
+        # ROV GT
+        if self.rov_gt is not None:
+            gt_pos = _extract_pos(self.rov_gt, attrgetter("pos"))
+            ax.plot(*gt_pos.T, label="ROV ground truth", linestyle="--", color="C1", alpha=0.8)
+            ax.scatter(*gt_pos[0], marker="x", color="red", s=60, label="ROV start")
+
+        # ROV estimate
+        if self.x_upds is not None and self.x_upds.values:
+            est_pos = self._rov_est_pos(self.x_upds)
+            ax.plot(*est_pos.T, label="ROV estimate (upd)", color="C0", alpha=0.8)
+
+        # ASV GT
+        if self.asv_gt is not None:
+            asv_pos = _extract_pos(self.asv_gt, attrgetter("pos"))
+            ax.plot(*asv_pos.T, label="ASV ground truth", color="C2", linestyle="-.", alpha=0.6)
+            ax.scatter(*asv_pos[0], marker="^", color="C2", s=60)
+
+        # ASV estimate
+        if self.x_upds is not None and self.x_upds.values:
+            asv_est_pos = self._asv_est_pos(self.x_upds)
+            ax.plot(*asv_est_pos.T, label="ASV estimate (upd)", color="C3", alpha=0.8)
+
+        # Critical fixes for z-axis visibility
+        ax.set_xlabel("North [m]", labelpad=10)
+        ax.set_ylabel("East [m]", labelpad=10)
+        ax.set_zlabel("Down [m]", labelpad=10)
+
+        ax.invert_zaxis()  # Invert z-axis to have depth increasing downwards
+        
+        # Force the z-axis to be visible by adjusting viewing angle
+        ax.view_init(elev=15, azim=-110)  # More extreme angle
+        
+        # Ensure tight aspect ratio doesn't hide axes
+        ax.set_box_aspect(None)  # Auto aspect
+        
+        # Make the panes transparent so axes show through
+        ax.xaxis.pane.set_edgecolor('black')
+        ax.yaxis.pane.set_edgecolor('black')
+        ax.zaxis.pane.set_edgecolor('black')
+        ax.xaxis.pane.set_alpha(0.1)
+        ax.yaxis.pane.set_alpha(0.1)
+        ax.zaxis.pane.set_alpha(0.1)
+        
+        # Force grid on all axes
+        ax.grid(True)
+        
+        ax.set_title(f"{self.scenario_name} — 3D Trajectories")
+        ax.legend(loc='upper right')
+        
+        fig.tight_layout()
+        return fig
+    
+    def plot_rmse(self):
+        """
+        Plot position RMSE over time for ROV and ASV.
+        RMSE = sqrt(mean((x_est - x_gt)^2)) at each time.
+        """
+
+        print("Plotting RMSE...")
+        if self.x_upds is None:
+            return None
+
+        fig, axs = plt.subplots(2, 1, figsize=(10, 6), sharex=False)
+
+        # -------------------------------------------------
+        # ROV RMSE
+        # -------------------------------------------------
+        if self.rov_gt is not None:
+            rov_gt_t = np.asarray(self.rov_gt.times)
+            rov_gt_pos = _extract_pos(self.rov_gt, attrgetter("pos"))
+
+            rov_est_t = np.asarray(self.x_upds.times)
+            rov_est_pos = self._rov_est_pos(self.x_upds)
+
+            rov_est_i = _interp(rov_est_t, rov_est_pos, rov_gt_t)
+            rov_rmse, _ = _rmse(rov_gt_pos, rov_est_i)
+
+            axs[0].plot(
+                rov_gt_t,
+                rov_rmse,
+                label="ROV position RMSE",
+                color="C0",
+            )
+
+        axs[0].set_ylabel("RMSE [m]")
+        axs[0].set_title("ROV Position RMSE")
+        axs[0].grid(True)
+        axs[0].legend()
+
+        # -------------------------------------------------
+        # ASV RMSE
+        # -------------------------------------------------
+        if self.asv_gt is not None:
+            asv_gt_t = np.asarray(self.asv_gt.times)
+            asv_gt_pos = _extract_pos(self.asv_gt, attrgetter("pos"))
+
+            asv_est_t = np.asarray(self.x_upds.times)
+            asv_est_pos = self._asv_est_pos(self.x_upds)
+
+            asv_est_i = _interp(asv_est_t, asv_est_pos, asv_gt_t)
+            asv_rmse, _ = _rmse(asv_gt_pos, asv_est_i)
+
+            axs[1].plot(
+                asv_gt_t,
+                asv_rmse,
+                label="ASV position RMSE",
+                color="C3",
+            )
+
+        axs[1].set_xlabel("Time [s]")
+        axs[1].set_ylabel("RMSE [m]")
+        axs[1].set_title("ASV Position RMSE")
+        axs[1].grid(True)
+        axs[1].legend()
+
+        fig.suptitle(f"ESKF RMSE — {self.scenario_name}")
+        fig.tight_layout()
+        return fig
+
+    def plot_rov_position(self):
+        fig, axs = plt.subplots(3, 1, sharex=True, figsize=(10, 8))
+        labels = ["North [m]", "East [m]", "Down [m]"]
+
+        times_upd = np.array(self.x_upds.times)
+        est_pos = self._rov_est_pos(self.x_upds)
+        std3 = self._rov_est_std(self.x_upds)
+
+        for i, (ax, lbl) in enumerate(zip(axs, labels)):
+            # GT
+            if self.rov_gt is not None:
+                gt_times = np.array(self.rov_gt.times)
+                gt_pos = _extract_pos(self.rov_gt, attrgetter("pos"))
+                ax.plot(gt_times, gt_pos[:, i], label="GT", linestyle="--", color="C1", alpha=0.8)
+
+            # Est + band
+            ax.plot(times_upd, est_pos[:, i], label="Est", color="C0")
+            ax.fill_between(
+                times_upd,
+                est_pos[:, i] - std3[:, i],
+                est_pos[:, i] + std3[:, i],
+                alpha=0.2,
+                color="C0",
+                label="±3σ",
+            )
+
+            # Depth meas only on Down
+            if i == 2 and self.z_depth is not None:
+                depth_times = np.array(self.z_depth.times)
+                depth_vals = np.array([float(v[0]) for v in self.z_depth.values])
+                ax.scatter(depth_times, depth_vals, s=8, color="C3", alpha=0.5, label="Depth meas", zorder=5)
+
+            ax.set_ylabel(lbl)
+            ax.legend()
+
+        axs[0].set_title(f"{self.scenario_name} — ROV Position")
+        axs[-1].set_xlabel("Time [s]")
+        fig.tight_layout()
+        return fig
+
+    def plot_asv_position(self):
+        fig, axs = plt.subplots(3, 1, sharex=True, figsize=(10, 8))
+        labels = ["North [m]", "East [m]", "Down [m]"]
+
+        times_upd = np.array(self.x_upds.times)
+        est_pos = self._asv_est_pos(self.x_upds)
+        std3 = self._asv_est_std(self.x_upds)
+
+        # Precompute GNSS arrays once (correctly)
+        if self.z_gnss_asv is not None:
+            gnss_times = np.array(self.z_gnss_asv.times)
+            gnss_pos = np.stack([np.asarray(m.pos, dtype=float).reshape(3) for m in self.z_gnss_asv.values])  # (N,3)
+        else:
+            gnss_times, gnss_pos = None, None
+
+        for i, (ax, lbl) in enumerate(zip(axs, labels)):
+            if self.asv_gt is not None:
+                gt_times = np.array(self.asv_gt.times)
+                gt_pos = _extract_pos(self.asv_gt, attrgetter("pos"))
+                ax.plot(gt_times, gt_pos[:, i], label="GT", linestyle="--", color="C2", alpha=0.8)
+
+            
+            if gnss_pos is not None:
+                ax.scatter(
+                    gnss_times,
+                    gnss_pos[:, i],
+                    s=10,
+                    color="C4",
+                    alpha=0.4,
+                    label="GNSS meas" if i == 0 else None,  # avoid repeated legend entries
+                    zorder=5,
+                )
+            # if self.z_gnss_asv is not None:
+            #     gnss_times = np.array(self.z_gnss_asv.times)
+            #     gnss_pos = np.array([float(v[0]) for v in self.z_gnss_asv.values]) # (N,3)
+            #     ax.scatter(gnss_times, gnss_pos, s=10, color="C4", alpha=0.4, label="GNSS meas") #  zorder=5
+
+            ax.plot(times_upd, est_pos[:, i], label="Est", color="C3")
+            ax.fill_between(
+                times_upd,
+                est_pos[:, i] - std3[:, i],
+                est_pos[:, i] + std3[:, i],
+                alpha=0.2,
+                color="C3",
+                label="±3σ",
+            )
+
+            ax.set_ylabel(lbl)
+            ax.legend()
+
+        axs[0].set_title(f"{self.scenario_name} — ASV Position")
+        axs[-1].set_xlabel("Time [s]")
+        fig.tight_layout()
+        return fig
+
+    def plot_usbl_measurements(self):
+        if self.z_usbl is None:
+            return None
+        fig, axs = plt.subplots(2, 1, sharex=True, figsize=(10, 5))
+        times = np.array(self.z_usbl.times)
+        azi = np.array([float(v[0]) for v in self.z_usbl.values])
+        elev = np.array([float(v[1]) for v in self.z_usbl.values])
+
+        axs[0].plot(times, np.rad2deg(azi), ".", color="C4", markersize=4)
+        axs[0].set_ylabel("Azimuth [deg]")
+        axs[1].plot(times, np.rad2deg(elev), ".", color="C5", markersize=4)
+        axs[1].set_ylabel("Elevation [deg]")
+        axs[0].set_title(f"{self.scenario_name} — USBL Measurements")
+        axs[-1].set_xlabel("Time [s]")
+        fig.tight_layout()
+        return fig
+
+    def plot_range_measurements(self):
+        if self.z_range is None:
+            return None
+        fig, ax = plt.subplots(figsize=(10, 3))
+        times = np.array(self.z_range.times)
+        ranges = np.array([float(v[0]) for v in self.z_range.values])
+
+        # True range for reference (use lever arm = 0 here unless you want to include it)
+        if self.rov_gt is not None and self.asv_gt is not None:
+            true_ranges = []
+            for t in times:
+                rov = self.rov_gt.at_time(t)
+                asv = self.asv_gt.at_time(t)
+                true_ranges.append(np.linalg.norm(np.asarray(rov.pos) - np.asarray(asv.pos)))
+            ax.plot(times, true_ranges, label="True (ASV pos to ROV pos)", linestyle="--", color="C1", alpha=0.8)
+
+        ax.plot(times, ranges, ".", color="C4", markersize=4, label="Measured")
+        ax.set_ylabel("Range [m]")
+        ax.set_xlabel("Time [s]")
+        ax.set_title(f"{self.scenario_name} — Range Measurements")
+        ax.legend()
+        fig.tight_layout()
+        return fig
+
+    def plot_rov_position_error(self):
+        """ROV position error (est - gt) over time with ±3σ from joint covariance."""
+        if self.rov_gt is None:
+            return None
+
+        fig, axs = plt.subplots(3, 1, sharex=True, figsize=(10, 7))
+        labels = ["err N [m]", "err E [m]", "err D [m]"]
+
+        times_upd = np.array(self.x_upds.times)
+        est_pos = self._rov_est_pos(self.x_upds)
+        std3 = self._rov_est_std(self.x_upds)
+
+        gt_pos_at_upd = np.stack([self.rov_gt.at_time(t).pos for t in times_upd])
+        error = est_pos - gt_pos_at_upd
+
+        for i, (ax, lbl) in enumerate(zip(axs, labels)):
+            ax.plot(times_upd, error[:, i], color="C0", label="error")
+            ax.fill_between(times_upd, -std3[:, i], std3[:, i], alpha=0.2, color="C0", label="±3σ")
+            ax.axhline(0.0, color="k", linewidth=0.5)
+            ax.set_ylabel(lbl)
+            ax.legend()
+
+        axs[0].set_title(f"{self.scenario_name} — ROV Position Error")
+        axs[-1].set_xlabel("Time [s]")
+        fig.tight_layout()
+        return fig
+
+    def to_csv_estimated_values(self, filename: str = "estimated_values.csv"):
+        """Export estimated ASV/ROV states to CSV in save_dir."""
+        if self.save_dir is None or self.x_upds is None or not self.x_upds.values:
+            return
+
+        path = Path(self.save_dir)
+        path.mkdir(parents=True, exist_ok=True)
+
+        times = np.asarray(self.x_upds.times, dtype=float)
+        rov_pos = self._rov_est_pos(self.x_upds)
+        rov_vel = self._rov_est_vel(self.x_upds)
+        asv_pos = self._asv_est_pos(self.x_upds)
+        asv_vel = self._asv_est_vel(self.x_upds)
+
+        out_file = path / filename
+        with out_file.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "time_s",
+                "rov_pos_n",
+                "rov_pos_e",
+                "rov_pos_d",
+                "rov_vel_n",
+                "rov_vel_e",
+                "rov_vel_d",
+                "asv_pos_n",
+                "asv_pos_e",
+                "asv_pos_d",
+                "asv_vel_n",
+                "asv_vel_e",
+                "asv_vel_d",
+            ])
+
+            for i in range(len(times)):
+                writer.writerow([
+                    times[i],
+                    rov_pos[i, 0],
+                    rov_pos[i, 1],
+                    rov_pos[i, 2],
+                    rov_vel[i, 0],
+                    rov_vel[i, 1],
+                    rov_vel[i, 2],
+                    asv_pos[i, 0],
+                    asv_pos[i, 1],
+                    asv_pos[i, 2],
+                    asv_vel[i, 0],
+                    asv_vel[i, 1],
+                    asv_vel[i, 2],
+                ])
+
+    @staticmethod
+    def _chi2_bands(ax, times, dof, alpha=0.95):
+        ci_lo, ci_hi = chi2.interval(alpha, dof)
+        ci_med = chi2.ppf(0.5, dof)
+        ax.axhline(ci_lo,  color="tab:orange", ls="--", alpha=0.7,
+                   label=f"χ²({dof}) {alpha:.0%} CI")
+        ax.axhline(ci_med, color="tab:green",  ls="--", alpha=0.7,
+                   label=f"χ²({dof}) median")
+        ax.axhline(ci_hi,  color="tab:orange", ls="--", alpha=0.7)
+
+    def plot_nees(self):
+        """NEES for ROV position (3 DOF) and ASV position (3 DOF)."""
+        if self.rov_gt is None or self.asv_gt is None or self.x_upds is None:
+            return None
+
+        times, nees_rov, nees_asv = [], [], []
+        for t, x in self.x_upds.items():
+            gt = JointNominalState(
+                asv=self.asv_gt.at_time(t),
+                rov=self.rov_gt.at_time(t),
+            )
+            err_gauss = x.get_err_gauss(gt)
+            err = np.asarray(err_gauss.mean)
+            P = err_gauss.cov
+
+            rov_err = err[JointIdx.ROV_POS]
+            rov_P = P[JointIdx.ROV_POS, JointIdx.ROV_POS]
+            nees_rov.append(float(rov_err @ np.linalg.solve(rov_P, rov_err)))
+
+            asv_err = err[JointIdx.ASV_POS]
+            asv_P = P[JointIdx.ASV_POS, JointIdx.ASV_POS]
+            nees_asv.append(float(asv_err @ np.linalg.solve(asv_P, asv_err)))
+
+            times.append(t)
+
+        times = np.array(times)
+        fig, axs = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
+
+        axs[0].semilogy(times, nees_rov, color="C0", label="NEES")
+        self._chi2_bands(axs[0], times, dof=3)
+        axs[0].set_ylabel("NEES ROV pos (3 DOF)")
+        axs[0].legend()
+
+        axs[1].semilogy(times, nees_asv, color="C3", label="NEES")
+        self._chi2_bands(axs[1], times, dof=3)
+        axs[1].set_ylabel("NEES ASV pos (3 DOF)")
+        axs[1].set_xlabel("Time [s]")
+        axs[1].legend()
+
+        axs[0].set_title(f"{self.scenario_name} — NEES")
+        fig.tight_layout()
+        return fig
+
+    def plot_nis(self):
+        """NIS for each active sensor (GNSS, USBL, range, depth)."""
+        if not self.z_preds:
+            return None
+
+        sensor_cfg = {
+            "gnss":  ("GNSS (3 DOF)",  3,  "C0", False),
+            "usbl":  ("USBL (2 DOF)",  2,  "C4", True),
+            "range": ("Range (1 DOF)", 1,  "C2", False),
+            "depth": ("Depth (1 DOF)", 1,  "C5", False),
+        }
+        active = [(k, *sensor_cfg[k]) for k in sensor_cfg if k in self.z_preds]
+        if not active:
+            return None
+
+        fig, axs = plt.subplots(len(active), 1, sharex=True,
+                                figsize=(10, 2.5 * len(active)))
+        if len(active) == 1:
+            axs = [axs]
+
+        for ax, (key, label, dof, color, wrap_az) in zip(axs, active):
+            z_pred_tseq, z_meas_tseq = self.z_preds[key]
+            times, nis_vals = [], []
+            for t, z_pred in z_pred_tseq.items():
+                if t not in z_meas_tseq:
+                    continue
+                z_p = np.asarray(z_pred.mean).reshape(-1)
+                z_m = np.asarray(z_meas_tseq.get_t(t)).reshape(-1)
+                innov = z_m - z_p
+                if wrap_az:
+                    innov[0] = wrap_to_pi(innov[0])
+                nis = float(innov @ np.linalg.solve(z_pred.cov, innov))
+                times.append(t)
+                nis_vals.append(nis)
+
+            times = np.array(times)
+            ax.semilogy(times, nis_vals, ".", color=color, markersize=4,
+                        label="NIS")
+            self._chi2_bands(ax, times, dof=dof)
+            ax.set_ylabel(label)
+            ax.legend()
+
+        axs[0].set_title(f"{self.scenario_name} — NIS")
+        axs[-1].set_xlabel("Time [s]")
+        fig.tight_layout()
+        return fig
+
+    def show(self):
+        self.to_csv_estimated_values()
+        self._save(self.plot3d(), "3d_trajectory")
+        self._save(self.plot_rmse(), "rmse")
+        self._save(self.plot_rov_position(), "rov_position")
+        self._save(self.plot_asv_position(), "asv_position")
+        self._save(self.plot_rov_position_error(), "rov_position_error")
+        self._save(self.plot_nees(), "nees")
+        self._save(self.plot_nis(), "nis")
+        self._save(self.plot_usbl_measurements(), "usbl")
+        self._save(self.plot_range_measurements(), "range")
+        plt.show(block=True)
+
+    def _save(self, fig, name: str):
+        if fig is None:
+            return
+        if self.save_dir is None:
+            return
+        path = Path(self.save_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path / f"{name}.png", dpi=150, bbox_inches="tight")
