@@ -132,9 +132,6 @@ class PlotterESKFJoint:
     # z_preds from run_eskf: {sensor: (z_pred_tseq, z_meas_tseq)}
     z_preds: dict = field(default_factory=dict)
 
-    # z_preds from run_eskf: {sensor: (z_pred_tseq, z_meas_tseq)}
-    z_preds: dict = field(default_factory=dict)
-
     # ------------------------
     # Helpers: extract arrays
     # ------------------------
@@ -477,18 +474,13 @@ class PlotterESKFJoint:
                     asv_vel[i, 0], asv_vel[i, 1], asv_vel[i, 2],
                 ])
 
-    def export_statistics(self, filename: str = "eskf_statistics.csv"):
-        """
-        Export per-platform statistics (position + velocity) to CSV in save_dir.
-        """
-        if self.save_dir is None or self.x_upds is None or not self.x_upds.values:
-            return None
-
-        path = Path(self.save_dir)
-        path.mkdir(parents=True, exist_ok=True)
+    def collect_statistics_rows(self) -> list[dict]:
+        if self.x_upds is None or not self.x_upds.values:
+            return []
 
         rows = []
         times = np.asarray(self.x_upds.times, dtype=float)
+        #nis_stats = self._compute_nis_stats()
 
         # ---------- ROV ----------
         if self.rov_gt is not None:
@@ -534,9 +526,12 @@ class PlotterESKFJoint:
                 #"path_length_error_pct": float(100.0 * abs(pl_est - pl_gt) / pl_gt) if pl_gt > 0 else np.nan,
                 "mean_nees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
                 "mean_nees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
+                "anees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
+                "anees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
                 "scenario": self.scenario_name,
                 "platform": "ROV",
                 #**{f"vel_{k}": v for k, v in vel_stats.items()},
+                #**nis_stats,
             })
 
         # ---------- ASV ----------
@@ -583,10 +578,29 @@ class PlotterESKFJoint:
                 # "path_length_error_pct": float(100.0 * abs(pl_est - pl_gt) / pl_gt) if pl_gt > 0 else np.nan,
                 "mean_nees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
                 "mean_nees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
+                "anees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
+                "anees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
                 "scenario": self.scenario_name,
                 "platform": "ASV",
                 # **{f"vel_{k}": v for k, v in vel_stats.items()},
+                #**nis_stats,
             })
+
+        return rows
+
+    def export_statistics(self, filename: str = "eskf_statistics.csv"):
+        """
+        Export per-platform statistics (position + velocity) to CSV in save_dir.
+        """
+        if self.save_dir is None:
+            return None
+
+        rows = self.collect_statistics_rows()
+        if not rows:
+            return None
+
+        path = Path(self.save_dir)
+        path.mkdir(parents=True, exist_ok=True)
 
         out_file = path / filename
         with out_file.open("w", newline="", encoding="utf-8") as f:
@@ -595,6 +609,41 @@ class PlotterESKFJoint:
             writer.writerows(rows)
 
         return out_file
+
+    def _compute_nis_stats(self) -> dict:
+        if not self.z_preds:
+            return {}
+
+        sensor_cfg = {
+            "gnss":  (3, False),
+            "usbl":  (2, True),
+            "range": (1, False),
+            "depth": (1, False),
+        }
+
+        stats = {}
+        for key, (dof, wrap_az) in sensor_cfg.items():
+            if key not in self.z_preds:
+                continue
+
+            z_pred_tseq, z_meas_tseq = self.z_preds[key]
+            nis_vals = []
+            for t, z_pred in z_pred_tseq.items():
+                if t not in z_meas_tseq:
+                    continue
+                z_p = np.asarray(z_pred.mean).reshape(-1)
+                z_m = np.asarray(z_meas_tseq.get_t(t)).reshape(-1)
+                innov = z_m - z_p
+                if wrap_az:
+                    innov[0] = wrap_to_pi(innov[0])
+                nis = float(innov @ np.linalg.solve(z_pred.cov, innov))
+                nis_vals.append(nis)
+
+            stats[f"anis_{key}"] = float(np.nanmean(nis_vals)) if nis_vals else np.nan
+            stats[f"nis_samples_{key}"] = int(len(nis_vals))
+            stats[f"nis_dof_{key}"] = int(dof)
+
+        return stats
 
     @staticmethod
     def _chi2_bands(ax, times, dof, alpha=0.95):

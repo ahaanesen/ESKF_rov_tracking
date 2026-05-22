@@ -1,3 +1,6 @@
+import csv
+from pathlib import Path
+
 import numpy as np
 
 from quaternion import RotationQuaterion
@@ -7,6 +10,7 @@ from tracking_and_navigation.generate_measurements import MeasurementGenerator
 from tracking_and_navigation.run_eskf import run_eskf_s1, run_eskf_s2, run_eskf_s3
 from tracking_and_navigation.plotting import PlotterESKFJoint
 from tracking_and_navigation.states import AsvNominalState, JointEskfState, JointNominalState
+from utils.withXYZ import WithXYZ
 
 from tracking_and_navigation.tuning_sim import (
     eskf_sim,
@@ -37,7 +41,7 @@ TRAJECTORY_TYPE = TrajectoryType.CIRCULAR
 #   MISS_PROB      — probability of dropping each acoustic measurement [0, 1]
 #   SOUND_SPEED    — acoustic propagation speed [m/s]
 #
-ACOUSTIC_DELAY = True
+ACOUSTIC_DELAY = False
 JITTER_STD     = 0.1    # ±500 ms 1-sigma
 MISS_PROB      = 0.10    # 10 % dropout
 SOUND_SPEED    = 1500.0  # m/s
@@ -96,11 +100,11 @@ def run_simulations():
     x_init = _init_asv_from_gnss(x_init_sim, z_gnss_tseq)
 
     traj_name = TRAJECTORY_TYPE.value
-    save_dir = f"plots/{traj_name}_dt0_01_cv_020_aco_delay_{ACOUSTIC_DELAY}_jitter_{JITTER_STD}_miss_{MISS_PROB}"
+    save_dir = f"plots/{traj_name}_dt0_01_cv_0_02_aco_delay_{ACOUSTIC_DELAY}_jitter_{JITTER_STD}_miss_{MISS_PROB}_imu_driven_newStats"
 
     # 3) Run scenarios
     print(f"[{traj_name}] Scenario 1: GNSS + Bearing only")
-    upd_s1, pred_s1 = run_eskf_s1(
+    upd_s1, pred_s1, zp_s1 = run_eskf_s1(
         eskf=eskf_sim,
         x_init=x_init,
         z_imu_tseq=z_imu_tseq,
@@ -109,7 +113,7 @@ def run_simulations():
     )
 
     print(f"[{traj_name}] Scenario 2: GNSS + Bearing + Range")
-    upd_s2, pred_s2 = run_eskf_s2(
+    upd_s2, pred_s2, zp_s2 = run_eskf_s2(
         eskf=eskf_sim,
         x_init=x_init,
         z_imu_tseq=z_imu_tseq,
@@ -119,7 +123,7 @@ def run_simulations():
     )
 
     print(f"[{traj_name}] Scenario 3: GNSS + Bearing + Range + Depth")
-    upd_s3, pred_s3 = run_eskf_s3(
+    upd_s3, pred_s3, zp_s3 = run_eskf_s3(
         eskf=eskf_sim,
         x_init=x_init,
         z_imu_tseq=z_imu_tseq,
@@ -130,18 +134,22 @@ def run_simulations():
     )
 
     # 4) Plot
-    PlotterESKFJoint(
+    scenario_rows = []
+
+    plotter_s1 = PlotterESKFJoint(
         rov_gt=rov_gt_tseq,
         asv_gt=asv_gt_tseq,
         x_upds=upd_s1,
         x_preds=pred_s1,
         z_gnss_asv=z_gnss_tseq,
         z_usbl=z_usbl_tseq,
+        z_preds=zp_s1,
         scenario_name=f"[{traj_name}] Scenario 1: Bearing-only",
         save_dir=f"{save_dir}/scenario1",
-    ).show()
+    )
+    scenario_rows.extend(plotter_s1.collect_statistics_rows())
 
-    PlotterESKFJoint(
+    plotter_s2 = PlotterESKFJoint(
         rov_gt=rov_gt_tseq,
         asv_gt=asv_gt_tseq,
         x_upds=upd_s2,
@@ -149,11 +157,13 @@ def run_simulations():
         z_gnss_asv=z_gnss_tseq,
         z_usbl=z_usbl_tseq,
         z_range=z_range_tseq,
+        z_preds=zp_s2,
         scenario_name=f"[{traj_name}] Scenario 2: Bearing + Range",
         save_dir=f"{save_dir}/scenario2",
-    ).show()
+    )
+    scenario_rows.extend(plotter_s2.collect_statistics_rows())
 
-    PlotterESKFJoint(
+    plotter_s3 = PlotterESKFJoint(
         rov_gt=rov_gt_tseq,
         asv_gt=asv_gt_tseq,
         x_upds=upd_s3,
@@ -162,9 +172,30 @@ def run_simulations():
         z_usbl=z_usbl_tseq,
         z_range=z_range_tseq,
         z_depth=z_depth_tseq,
+        z_preds=zp_s3,
         scenario_name=f"[{traj_name}] Scenario 3: Bearing + Range + Depth",
         save_dir=f"{save_dir}/scenario3",
-    ).show()
+    )
+    scenario_rows.extend(plotter_s3.collect_statistics_rows())
+
+    if scenario_rows:
+        summary_path = Path(save_dir)
+        summary_path.mkdir(parents=True, exist_ok=True)
+        summary_file = summary_path / "eskf_statistics_summary.csv"
+        fieldnames = []
+        for row in scenario_rows:
+            for key in row.keys():
+                if key not in fieldnames:
+                    fieldnames.append(key)
+
+        with summary_file.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(scenario_rows)
+
+    plotter_s1.show()
+    plotter_s2.show()
+    plotter_s3.show()
 
 
 def _init_asv_from_gnss(
@@ -189,9 +220,9 @@ def _init_asv_from_gnss(
 
     asv_prev = x_init.nom.asv
     asv_init = AsvNominalState(
-        pos=pos1,
-        vel=[0,0,0],
-        ori=RotationQuaterion.from_euler([0.0, 0.0, yaw]),
+        pos=WithXYZ.from_array(pos1),
+        vel=WithXYZ.from_array(np.zeros(3)),
+        ori=RotationQuaterion.from_euler(np.asarray([0.0, 0.0, yaw], dtype=float)),
         accm_bias=asv_prev.accm_bias,
         gyro_bias=asv_prev.gyro_bias,
     )

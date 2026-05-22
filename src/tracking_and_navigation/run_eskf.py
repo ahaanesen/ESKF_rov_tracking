@@ -15,112 +15,107 @@ from tracking_and_navigation.measurements import (
 )
 
 
-def _merge_other_measurements(*tseqs: TimeSequence):
+def _merge_measurements(*tseqs: TimeSequence):
     """
-    Merge non-GNSS measurement streams into a sorted list [(t, z), ...].
+    Merge multiple TimeSequence measurement streams into a sorted python list [(t, z), ...].
     """
     all_meas = []
     for ts in tseqs:
         if ts is None:
             continue
-        all_meas += list(ts.items())
+        all_meas += [(t, z) for t, z in ts.items()]
     all_meas.sort(key=lambda x: x[0])
     return all_meas
 
 
-def _run_preint_scenario(
+def _run_joint_scenario(
     eskf: ESKF_joint,
     x_init: JointEskfState,
     z_imu_tseq: TimeSequence[ImuMeasurement],
-    z_gnss_tseq: TimeSequence[GnssMeasurement],
-    other_meas_list,  # sorted [(t, z)] of non-GNSS measurements
+    meas_list,  # list[(t, measurement)]
     desc: str,
-):
+    include_init_in_upd: bool,
+    include_init_in_pred: bool,
+) -> tuple[
+    TimeSequence[JointEskfState], 
+    TimeSequence[JointEskfState], 
+    dict[str, tuple[TimeSequence, TimeSequence]]
+]:
     """
-    GNSS-driven loop with IMU preintegration.
+    Run joint filter driven by IMU, with async updates (USBL/range/depth).
 
-    The filter predicts and updates only at GNSS measurement times.
-    Non-GNSS measurements (USBL, range, depth) that arrive between two GNSS
-    events are buffered causally and applied in time order at the next GNSS
-    event, before the GNSS update itself.
-
-    Between GNSS events all IMU samples are collected and passed to
-    eskf.preintegrate_imu(), which composes F and Q along the nominal
-    trajectory and applies a single 21×21 covariance update.
-
-    Returns (upd_tseq, pred_tseq, z_preds) where z_preds is a dict mapping
+    Return (upd_tseq, pred_tseq, z_preds) where z_preds is a dict mapping
     sensor name to (z_pred_tseq, z_meas_tseq) for NIS computation.
+
+    Strategy:
+      - iterate over IMU times
+      - between IMU steps, apply any pending low-rate measurements whose timestamp <= current IMU time
+      - for each measurement, first predict from last time -> meas time using IMU at current index (approx)
     """
-    imu_list = list(z_imu_tseq.items())
-    imu_len = len(imu_list)
-    if not imu_list:
+    if not z_imu_tseq.times:
         raise ValueError("z_imu_tseq is empty")
 
-    t_prev = imu_list[0][0]
+    # Measurement cursor
+    m_idx = 0
+    m_len = len(meas_list)
+
+    t_prev = z_imu_tseq.times[0]
     x_prev = x_init
-    imu_idx = 0
-    other_idx = 0
-    other_len = len(other_meas_list)
 
-    upd_tseq = TimeSequence()
-    pred_tseq = TimeSequence([(t_prev, x_init)])
+    upd_tseq = TimeSequence([(t_prev, x_init)]) if include_init_in_upd else TimeSequence()
+    pred_tseq = TimeSequence([(t_prev, x_init)]) if include_init_in_pred else TimeSequence()
 
-    # Collect (t_epoch, z_pred_gauss, z_meas) for each sensor
-    _gnss_buf: list[tuple] = []
-    _usbl_buf: list[tuple] = []
-    _range_buf: list[tuple] = []
-    _depth_buf: list[tuple] = []
+    # Buffers for NIS computation
+    _gnss_buf = []
+    _usbl_buf = []
+    _range_buf = []
+    _depth_buf = []
 
-    for t_gnss, z_gnss in tqdm(z_gnss_tseq.items(), desc=desc):
-        if t_gnss < t_prev:
-            continue
+    for t_imu, z_imu in tqdm(z_imu_tseq.items(), desc=desc):
+        # 1) Handle any low-rate measurements that arrived up to this IMU time
+        while m_idx < m_len and meas_list[m_idx][0] <= t_imu:
+            t_m, z_m = meas_list[m_idx]
+            dt_m = t_m - t_prev
+            if dt_m < 0:
+                m_idx += 1
+                continue
 
-        # 1) Collect all IMU samples up to this GNSS time for preintegration
-        imu_steps: list[tuple[ImuMeasurement, float]] = []
-        while imu_idx < imu_len and imu_list[imu_idx][0] <= t_gnss:
-            t_imu, z_imu = imu_list[imu_idx]
-            dt = t_imu - t_prev
-            if dt > 0:
-                imu_steps.append((z_imu, dt))
-                t_prev = t_imu
-            imu_idx += 1
+            # Predict to measurement time using the latest available IMU sample (z_imu)
+            x_pred = eskf.predict_from_imu(x_prev, z_imu, dt_m)
+            if t_m not in pred_tseq:
+                pred_tseq.insert(t_m, x_pred)
 
-        # Bridge any gap between last IMU and GNSS time
-        if t_gnss > t_prev:
-            last_z_imu = imu_list[max(0, imu_idx - 1)][1]
-            imu_steps.append((last_z_imu, t_gnss - t_prev))
-            t_prev = t_gnss
-
-        # 2) Single covariance propagation over all accumulated IMU steps
-        x_pred = eskf.preintegrate_imu(x_prev, imu_steps)
-        if t_gnss not in pred_tseq:
-            pred_tseq.insert(t_gnss, x_pred)
-
-        # 3) Buffer non-GNSS measurements that arrived before this GNSS event
-        #    and apply them in causal (time) order before the GNSS update
-        buffered: list[tuple[float, object]] = []
-        while other_idx < other_len and other_meas_list[other_idx][0] <= t_gnss:
-            buffered.append(other_meas_list[other_idx])
-            other_idx += 1
-
-        x_cur = x_pred
-        for _t, z_m in buffered:
-            if isinstance(z_m, UsblMeasurement):
-                x_cur, z_pred_m = eskf.update_from_usbl(x_cur, z_m)
-                _usbl_buf.append((_t, z_pred_m, z_m))
+            # Update by type
+            if isinstance(z_m, GnssMeasurement):
+                x_upd, z_pred = eskf.update_from_gnss_asv(x_pred, z_m)
+                _gnss_buf.append((t_m, z_pred, z_m))
+            elif isinstance(z_m, UsblMeasurement):
+                x_upd, z_pred = eskf.update_from_usbl(x_pred, z_m)
+                _usbl_buf.append((t_m, z_pred, z_m))
             elif isinstance(z_m, RangeMeasurement):
-                x_cur, z_pred_m = eskf.update_from_range(x_cur, z_m)
-                _range_buf.append((_t, z_pred_m, z_m))
+                x_upd, z_pred = eskf.update_from_range(x_pred, z_m)
+                _range_buf.append((t_m, z_pred, z_m))
             elif isinstance(z_m, DepthMeasurement):
-                x_cur, z_pred_m = eskf.update_from_depth(x_cur, z_m)
-                _depth_buf.append((_t, z_pred_m, z_m))
+                x_upd, z_pred = eskf.update_from_depth(x_pred, z_m)
+                _depth_buf.append((t_m, z_pred, z_m))
+            else:
+                raise TypeError(f"Unsupported measurement type: {type(z_m)}")
 
-        # 4) GNSS update last
-        x_upd, z_pred_gnss = eskf.update_from_gnss_asv(x_cur, z_gnss)
-        _gnss_buf.append((t_gnss, z_pred_gnss, z_gnss))
-        if t_gnss not in upd_tseq:
-            upd_tseq.insert(t_gnss, x_upd)
-        x_prev = x_upd
+            if t_m not in upd_tseq:
+                upd_tseq.insert(t_m, x_upd)
+
+            x_prev = x_upd
+            t_prev = t_m
+            m_idx += 1
+
+        # 2) Regular IMU propagation to the IMU timestamp
+        dt = t_imu - t_prev
+        if dt > 0:
+            x_pred = eskf.predict_from_imu(x_prev, z_imu, dt)
+            if t_imu not in pred_tseq:
+                pred_tseq.insert(t_imu, x_pred)
+            x_prev = x_pred
+            t_prev = t_imu
 
     def _to_tseqs(lst):
         zp = TimeSequence()
@@ -142,7 +137,7 @@ def _run_preint_scenario(
 
 
 # -----------------------------------------------------------------------------
-# Scenario 1: GNSS + USBL
+# Scenario 1: USBL bearing only
 # -----------------------------------------------------------------------------
 def run_eskf_s1(
     eskf: ESKF_joint,
@@ -150,20 +145,25 @@ def run_eskf_s1(
     z_imu_tseq: TimeSequence[ImuMeasurement],
     z_gnss_tseq: TimeSequence[GnssMeasurement],
     z_usbl_tseq: TimeSequence[UsblMeasurement],
-):
-    other = _merge_other_measurements(z_usbl_tseq)
-    return _run_preint_scenario(
+) -> tuple[
+    TimeSequence[JointEskfState],
+    TimeSequence[JointEskfState],
+    dict[str, tuple[TimeSequence, TimeSequence]],
+]:
+    meas = _merge_measurements(z_gnss_tseq, z_usbl_tseq)
+    return _run_joint_scenario(
         eskf=eskf,
         x_init=x_init,
         z_imu_tseq=z_imu_tseq,
-        z_gnss_tseq=z_gnss_tseq,
-        other_meas_list=other,
-        desc="Scenario 1: GNSS + USBL (preint)",
+        meas_list=meas,
+        desc="Scenario 1 (Joint): USBL",
+        include_init_in_upd=False,
+        include_init_in_pred=False,
     )
 
 
 # -----------------------------------------------------------------------------
-# Scenario 2: GNSS + USBL + range
+# Scenario 2: USBL + range
 # -----------------------------------------------------------------------------
 def run_eskf_s2(
     eskf: ESKF_joint,
@@ -172,20 +172,25 @@ def run_eskf_s2(
     z_gnss_tseq: TimeSequence[GnssMeasurement],
     z_usbl_tseq: TimeSequence[UsblMeasurement],
     z_range_tseq: TimeSequence[RangeMeasurement],
-):
-    other = _merge_other_measurements(z_usbl_tseq, z_range_tseq)
-    return _run_preint_scenario(
+) -> tuple[
+    TimeSequence[JointEskfState],
+    TimeSequence[JointEskfState],
+    dict[str, tuple[TimeSequence, TimeSequence]],
+]:
+    meas = _merge_measurements(z_gnss_tseq, z_usbl_tseq, z_range_tseq)
+    return _run_joint_scenario(
         eskf=eskf,
         x_init=x_init,
         z_imu_tseq=z_imu_tseq,
-        z_gnss_tseq=z_gnss_tseq,
-        other_meas_list=other,
-        desc="Scenario 2: GNSS + USBL + Range (preint)",
+        meas_list=meas,
+        desc="Scenario 2 (Joint): USBL + Range",
+        include_init_in_upd=True,
+        include_init_in_pred=False,
     )
 
 
 # -----------------------------------------------------------------------------
-# Scenario 3: GNSS + USBL + range + depth
+# Scenario 3: USBL + range + depth
 # -----------------------------------------------------------------------------
 def run_eskf_s3(
     eskf: ESKF_joint,
@@ -195,13 +200,18 @@ def run_eskf_s3(
     z_usbl_tseq: TimeSequence[UsblMeasurement],
     z_range_tseq: TimeSequence[RangeMeasurement],
     z_depth_tseq: TimeSequence[DepthMeasurement],
-):
-    other = _merge_other_measurements(z_usbl_tseq, z_range_tseq, z_depth_tseq)
-    return _run_preint_scenario(
+) -> tuple[
+    TimeSequence[JointEskfState],
+    TimeSequence[JointEskfState],
+    dict[str, tuple[TimeSequence, TimeSequence]],
+]:
+    meas = _merge_measurements(z_gnss_tseq, z_usbl_tseq, z_range_tseq, z_depth_tseq)
+    return _run_joint_scenario(
         eskf=eskf,
         x_init=x_init,
         z_imu_tseq=z_imu_tseq,
-        z_gnss_tseq=z_gnss_tseq,
-        other_meas_list=other,
-        desc="Scenario 3: GNSS + USBL + Range + Depth (preint)",
+        meas_list=meas,
+        desc="Scenario 3 (Joint): USBL + Range + Depth",
+        include_init_in_upd=True,
+        include_init_in_pred=False,
     )
