@@ -1,11 +1,14 @@
 from dataclasses import dataclass, field
+from dataclasses import dataclass, field
 from operator import attrgetter
 from pathlib import Path
+import csv
 import csv
 
 import matplotlib as mpl
 import numpy as np
 from matplotlib import pyplot as plt
+from scipy.stats import chi2
 from scipy.stats import chi2
 
 from senfuslib import TimeSequence
@@ -23,6 +26,7 @@ from tracking_and_navigation.measurements import (
     RangeMeasurement,
     DepthMeasurement,
 )
+from utils.angles import wrap_to_pi
 from utils.angles import wrap_to_pi
 
 mpl.rcParams["axes.grid"] = True
@@ -124,6 +128,9 @@ class PlotterESKFJoint:
 
     scenario_name: str = "Joint scenario"
     save_dir: str = None
+
+    # z_preds from run_eskf: {sensor: (z_pred_tseq, z_meas_tseq)}
+    z_preds: dict = field(default_factory=dict)
 
     # z_preds from run_eskf: {sensor: (z_pred_tseq, z_meas_tseq)}
     z_preds: dict = field(default_factory=dict)

@@ -45,3 +45,16 @@ Bearing and range is computed on the ASV by an USBL, depth needs to be sent acou
     uv run python src/main.py
     ```
     
+## Dataset generation for FGO comparison
+This program is meant to be compared to a FGO solution to the same problem, thus they should both be run with the same dataset. As the ESKF already had a dataset generator, scripts were made to convert the dataset into ros2 bags fitting for the FGO.
+
+To generate the correct ros2 bags ROS2 humble and the microampere interfaces are needed, and a docker container was made to simplify the process. The docker container autommatically sets up the ros2 environment, copies the ESKF files, clones blueboat interfaces and switches to the correct "microAmp/fgo_rov_tracking" branch. Ros2 is automatically sourced in the docker terminal as well. 
+
+Opening docker (in terminal):
+```
+docker build -t eskf-humble:latest .
+docker-compose up -d
+docker exec -it eskf_humble bash 
+```
+
+Reopening in docker container migth be preferable to only opening the container in terminal.
