@@ -1,8 +1,12 @@
+import numpy as np
+
+from quaternion import RotationQuaterion
 from tracking_and_navigation.generate_trajectories import generate_trajectories, TrajectoryType
 from tracking_and_navigation.generate_measurements import MeasurementGenerator
 
 from tracking_and_navigation.run_eskf import run_eskf_s1, run_eskf_s2, run_eskf_s3
 from tracking_and_navigation.plotting import PlotterESKFJoint
+from tracking_and_navigation.states import AsvNominalState, JointEskfState, JointNominalState
 
 from tracking_and_navigation.tuning_sim import (
     eskf_sim,
@@ -33,13 +37,13 @@ TRAJECTORY_TYPE = TrajectoryType.CIRCULAR
 #   MISS_PROB      — probability of dropping each acoustic measurement [0, 1]
 #   SOUND_SPEED    — acoustic propagation speed [m/s]
 #
-ACOUSTIC_DELAY = False
-# JITTER_STD     = 0.05    # ±50 ms 1-sigma
-# MISS_PROB      = 0.10    # 10 % dropout
-# SOUND_SPEED    = 1500.0  # m/s
-JITTER_STD     = 0.0
-MISS_PROB      = 0.0
-SOUND_SPEED    = 1500.0
+ACOUSTIC_DELAY = True
+JITTER_STD     = 0.1    # ±500 ms 1-sigma
+MISS_PROB      = 0.10    # 10 % dropout
+SOUND_SPEED    = 1500.0  # m/s
+# JITTER_STD     = 0.0
+# MISS_PROB      = 0.0
+# SOUND_SPEED    = 1500.0
 
 
 def run_simulations():
@@ -68,7 +72,7 @@ def run_simulations():
     z_usbl_tseq = gen.generate_usbl(
         std_rad=usbl_sim.usbl_std,
         lever_arm=usbl_sim.lever_arm,
-        rate_hz=1.0,
+        rate_hz=0.2,
         acoustic_delay=ACOUSTIC_DELAY,
         jitter_std=JITTER_STD,
         miss_prob=MISS_PROB,
@@ -77,7 +81,7 @@ def run_simulations():
     z_range_tseq = gen.generate_range(
         std_m=range_sim.range_std,
         lever_arm=range_sim.lever_arm,
-        rate_hz=1.0,
+        rate_hz=0.2,
         acoustic_delay=ACOUSTIC_DELAY,
         jitter_std=JITTER_STD,
         miss_prob=MISS_PROB,
@@ -85,18 +89,20 @@ def run_simulations():
     )
     z_depth_tseq = gen.generate_depth(
         std_m=depth_sim.depth_std,
-        rate_hz=1.0,
-        miss_prob=0.05,
+        rate_hz=0.2,
+        miss_prob=0.0,
     )
 
+    x_init = _init_asv_from_gnss(x_init_sim, z_gnss_tseq)
+
     traj_name = TRAJECTORY_TYPE.value
-    save_dir = f"plots/{traj_name}_dt0_01_cv_020_imu_corr_ideal_meas_plots2"
+    save_dir = f"plots/{traj_name}_dt0_01_cv_020_aco_delay_{ACOUSTIC_DELAY}_jitter_{JITTER_STD}_miss_{MISS_PROB}"
 
     # 3) Run scenarios
     print(f"[{traj_name}] Scenario 1: GNSS + Bearing only")
     upd_s1, pred_s1 = run_eskf_s1(
         eskf=eskf_sim,
-        x_init=x_init_sim,
+        x_init=x_init,
         z_imu_tseq=z_imu_tseq,
         z_gnss_tseq=z_gnss_tseq,
         z_usbl_tseq=z_usbl_tseq,
@@ -105,7 +111,7 @@ def run_simulations():
     print(f"[{traj_name}] Scenario 2: GNSS + Bearing + Range")
     upd_s2, pred_s2 = run_eskf_s2(
         eskf=eskf_sim,
-        x_init=x_init_sim,
+        x_init=x_init,
         z_imu_tseq=z_imu_tseq,
         z_gnss_tseq=z_gnss_tseq,
         z_usbl_tseq=z_usbl_tseq,
@@ -115,7 +121,7 @@ def run_simulations():
     print(f"[{traj_name}] Scenario 3: GNSS + Bearing + Range + Depth")
     upd_s3, pred_s3 = run_eskf_s3(
         eskf=eskf_sim,
-        x_init=x_init_sim,
+        x_init=x_init,
         z_imu_tseq=z_imu_tseq,
         z_gnss_tseq=z_gnss_tseq,
         z_usbl_tseq=z_usbl_tseq,
@@ -159,3 +165,37 @@ def run_simulations():
         scenario_name=f"[{traj_name}] Scenario 3: Bearing + Range + Depth",
         save_dir=f"{save_dir}/scenario3",
     ).show()
+
+
+def _init_asv_from_gnss(
+    x_init: JointEskfState,
+    z_gnss_tseq,
+) -> JointEskfState:
+    gnss_items = list(z_gnss_tseq.items())
+    if len(gnss_items) < 2:
+        return x_init
+
+    _, z0 = gnss_items[0]
+    _, z1 = gnss_items[1]
+
+    pos0 = np.asarray(z0.pos, dtype=float).reshape(3)
+    pos1 = np.asarray(z1.pos, dtype=float).reshape(3)
+    d_ne = pos1[:2] - pos0[:2]
+
+    if np.hypot(d_ne[0], d_ne[1]) < 1e-9:
+        yaw = x_init.nom.asv.euler[2]
+    else:
+        yaw = float(np.arctan2(d_ne[1], d_ne[0]))
+
+    asv_prev = x_init.nom.asv
+    asv_init = AsvNominalState(
+        pos=pos1,
+        vel=[0,0,0],
+        ori=RotationQuaterion.from_euler([0.0, 0.0, yaw]),
+        accm_bias=asv_prev.accm_bias,
+        gyro_bias=asv_prev.gyro_bias,
+    )
+    return JointEskfState(
+        nom=JointNominalState(asv=asv_init, rov=x_init.nom.rov),
+        err=x_init.err,
+    )
