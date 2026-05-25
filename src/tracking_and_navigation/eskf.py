@@ -178,7 +178,7 @@ class ESKF_joint(_ESKFJointShared):
         if dt == 0.0:
             return x_prev
 
-        # ---- 1) ASV nominal propagation (reuse your ModelIMU)
+        # ---- 1) ASV nominal propagation
         asv_prev = x_prev.nom.asv
         z_corr = self.modelImuAsv.correct_z_imu(asv_prev, z_imu_asv)
         asv_pred = self.modelImuAsv.predict_nom(asv_prev, z_corr, dt)
@@ -208,62 +208,6 @@ class ESKF_joint(_ESKFJointShared):
         err_pred = MultiVarGauss(JointErrorState.from_array(np.zeros(JointIdx.N)), P_pred)
         return JointEskfState(nom=nom_pred, err=err_pred)
 
-    def preintegrate_imu(
-        self,
-        x_prev: JointEskfState,
-        imu_steps: list[tuple[ImuMeasurement, float]],
-    ) -> JointEskfState:
-        """
-        Accumulate a sequence of IMU measurements (z_imu, dt) into a single
-        prediction step.
-
-        Composes discrete F_k and Q_k matrices along the nominal trajectory:
-            F_total = F_n · … · F_1
-            Q_total = Q_n + F_n Q_{n-1} F_n^T + …   (built recursively)
-
-        Applies one covariance update P = F_total P F_total^T + Q_total,
-        which is mathematically equivalent to sequential predict_from_imu
-        calls but avoids the per-step 21×21 triple-product.
-        """
-        if not imu_steps:
-            return x_prev
-
-        n = JointIdx.N
-        asv_nom = x_prev.nom.asv
-        rov_nom = x_prev.nom.rov
-        F_total = np.eye(n)
-        Q_total = np.zeros((n, n))
-
-        for z_imu, dt in imu_steps:
-            if dt <= 0:
-                continue
-
-            # Linearise at current nominal before stepping it forward
-            z_corr = self.modelImuAsv.correct_z_imu(asv_nom, z_imu)
-            Ad_asv, GQGTd_asv = self.modelImuAsv.get_discrete_error_diff(asv_nom, z_corr, dt)
-            F_rov, Q_rov = self.modelCvRov.F_Q(dt)
-
-            # Step nominal forward
-            asv_nom = self.modelImuAsv.predict_nom(asv_nom, z_corr, dt)
-            rov_nom = self.modelCvRov.predict_nom(rov_nom, dt)
-
-            F_k = np.eye(n)
-            Q_k = np.zeros((n, n))
-            F_k[JointIdx.ASV, JointIdx.ASV] = Ad_asv
-            F_k[JointIdx.ROV, JointIdx.ROV] = F_rov
-            Q_k[JointIdx.ASV, JointIdx.ASV] = GQGTd_asv
-            Q_k[JointIdx.ROV, JointIdx.ROV] = Q_rov
-
-            # Compose: propagate accumulated noise through F_k, then add Q_k
-            Q_total = F_k @ Q_total @ F_k.T + Q_k
-            F_total = F_k @ F_total
-
-        P_pred = F_total @ x_prev.err.cov @ F_total.T + Q_total
-        nom_pred = JointNominalState(asv=asv_nom, rov=rov_nom)
-        err_pred = MultiVarGauss(JointErrorState.from_array(np.zeros(n)), P_pred)
-        return JointEskfState(nom=nom_pred, err=err_pred)
-
-    # ---- Example updates (optional, but shows how to use _update_err + _inject)
 
     def update_from_gnss_asv(
         self,

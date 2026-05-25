@@ -1,9 +1,10 @@
 import numpy as np
 from tqdm import tqdm
 
+from quaternion import RotationQuaterion
 from senfuslib import TimeSequence
 
-from tracking_and_navigation.states import JointEskfState
+from tracking_and_navigation.states import AsvNominalState, JointEskfState, JointNominalState, RovNominalCV
 from tracking_and_navigation.eskf import ESKF_joint
 
 from tracking_and_navigation.measurements import (
@@ -13,6 +14,8 @@ from tracking_and_navigation.measurements import (
     RangeMeasurement,
     DepthMeasurement,
 )
+from utils.angles import wrap_to_2pi, wrap_to_pi
+from utils.withXYZ import WithXYZ
 
 
 def _merge_measurements(*tseqs: TimeSequence):
@@ -214,4 +217,99 @@ def run_eskf_s3(
         desc="Scenario 3 (Joint): USBL + Range + Depth",
         include_init_in_upd=True,
         include_init_in_pred=False,
+    )
+
+def init_asv_from_gnss(
+    x_init: JointEskfState,
+    z_gnss_tseq,
+) -> JointEskfState:
+    gnss_items = list(z_gnss_tseq.items())
+    if len(gnss_items) < 2:
+        return x_init
+
+    _, z0 = gnss_items[0]
+    _, z1 = gnss_items[1]
+
+    pos0 = np.asarray(z0.pos, dtype=float).reshape(3)
+    pos1 = np.asarray(z1.pos, dtype=float).reshape(3)
+    d_ne = pos1[:2] - pos0[:2]
+
+    if np.hypot(d_ne[0], d_ne[1]) < 1e-9:
+        yaw = x_init.nom.asv.euler[2]
+    else:
+        yaw = float(np.arctan2(d_ne[1], d_ne[0]))
+
+    asv_prev = x_init.nom.asv
+    asv_init = AsvNominalState(
+        pos=WithXYZ.from_array(pos1),
+        vel=WithXYZ.from_array(np.zeros(3)),
+        ori=RotationQuaterion.from_euler(np.asarray([0.0, 0.0, yaw], dtype=float)),
+        accm_bias=asv_prev.accm_bias,
+        gyro_bias=asv_prev.gyro_bias,
+    )
+    return JointEskfState(
+        nom=JointNominalState(asv=asv_init, rov=x_init.nom.rov),
+        err=x_init.err,
+    )
+
+def init_rov_from_usbl_range_depth(
+    x_init: JointEskfState, # Initial guess (can be from ASV init or just default)
+    x_asv: AsvNominalState, # ASV state (after init from GNSS or in case we init runtime)
+    z_usbl_tseq,
+    z_range_tseq,
+    z_depth_tseq,
+    range_guess=10.0,
+    usbl_lever_arm=np.array([0.0, 0.0, 1.2]), # Assuming USBL is at ASV center for simplicity
+) -> JointEskfState:
+    usbl_items = list(z_usbl_tseq.items())
+    if not usbl_items:
+        return x_init
+
+    timestamp, usbl0 = usbl_items[0]
+    # _range0 = z_range_tseq.get_t(timestamp) if z_range_tseq else None
+    # _depth0 = z_depth_tseq.get_t(timestamp) if z_depth_tseq else None
+    # range = float(_range0) if _range0 else None
+    # depth = float(_depth0) if _depth0 else None
+
+    az = usbl0[0]  # azimuth
+    el = usbl0[1]  # elevation
+
+    sensor_pos = x_asv.pos + x_asv.ori.as_rotmat() @ usbl_lever_arm  # assuming lever arm is zero for simplicity
+
+    # scenario 1, default
+    rov_pos = WithXYZ.from_array([
+                sensor_pos.x + range_guess * np.cos(az) * np.cos(el),
+                sensor_pos.y + range_guess * np.sin(az) * np.cos(el),
+                sensor_pos.z + range_guess * np.sin(el),
+            ])    
+    rov_vel = x_init.nom.rov.vel  # default to initial guess
+
+
+    if z_range_tseq is not None:
+        _t, range = z_range_tseq.get_idx(0)
+        range = float(range)
+        # 2D position from range + bearing, keep z from initial guess
+        rov_pos = WithXYZ.from_array([
+            sensor_pos.x + range * np.cos(az) * np.cos(el),
+            sensor_pos.y + range * np.sin(az) * np.cos(el),
+            sensor_pos.z + range * np.sin(el),  # this will be zero if elevation is zero, otherwise we don't have better info than the initial guess
+        ])
+    if z_depth_tseq is not None and z_range_tseq is not None:
+        _t, range = z_range_tseq.get_idx(0)
+        _t, depth = z_depth_tseq.get_idx(0)
+        range = float(range)
+        depth = float(depth)
+        rov_pos = WithXYZ.from_array([
+            sensor_pos.x + range * np.cos(az) * np.cos(el),
+            sensor_pos.y + range * np.sin(az) * np.cos(el),
+            depth,  # depth is positive down, but we want z positive up
+        ])
+
+    rov_init = RovNominalCV(
+        pos=rov_pos,
+        vel=rov_vel,
+    )
+    return JointEskfState(
+        nom=JointNominalState(asv=x_asv, rov=rov_init),
+        err=x_init.err,
     )
