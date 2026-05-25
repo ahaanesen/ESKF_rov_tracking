@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from quaternion import RotationQuaterion
-from senfuslib import NamedArray, AtIndex, MetaData, MultiVarGauss
+from senfuslib import NamedArray, AtIndex, MultiVarGauss
 from utils.withXYZ import WithXYZ
 
 # -----------------------------------------------------------------------------

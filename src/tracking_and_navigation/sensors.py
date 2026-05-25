@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from senfuslib import MultiVarGauss
-from quaternion import RotationQuaterion
 
 from tracking_and_navigation.states import (
     JointEskfState,
