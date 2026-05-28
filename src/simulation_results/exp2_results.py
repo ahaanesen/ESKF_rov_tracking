@@ -11,6 +11,8 @@ WORKSPACE_SRC = Path(__file__).resolve().parents[1]
 if str(WORKSPACE_SRC) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_SRC))
 
+
+from pathlib import Path
 import numpy as np
 
 from tracking_and_navigation.generate_trajectories import TrajectoryType
@@ -33,20 +35,19 @@ MISS_PROB      = 0.0
 SOUND_SPEED    = 1500.0
 TDMA_FREQ      = 0.2  # 1 msg / 5 s
 
-SIGMA_VALUES = [0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 1.0]
+TRUE_RANGE = np.sqrt(269)  # pre-computed true range for this scenario
+RANGE_SCALE_VALUES = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0]
 
 def main():
-    outdir = Path("results_exp1_cv_tuning_fixed")
+    outdir = Path("results_exp2_range_scale_tuning_notMC")
     outdir.mkdir(parents=True, exist_ok=True)
 
     results = []
 
-    for sigma_a in SIGMA_VALUES:
-        print(f"[exp1] Running sigma_a = {sigma_a}")
+    for scale in RANGE_SCALE_VALUES:
+        print(f"[exp2] Running range scale = {scale:.3f}")
 
-        eskf_sim.modelCvRov.sigma_a = float(sigma_a)
-
-        save_dir = outdir / f"raw/cv_{sigma_a:.3f}"
+        save_dir = outdir / f"raw/range_scale_{scale:.3f}"
         save_dir.mkdir(parents=True, exist_ok=True)
 
         plotter = run_simulations_s1(
@@ -58,28 +59,29 @@ def main():
             TDMA_FREQ=TDMA_FREQ,
             SAVE_DIR=str(save_dir),
             ESKF_SIM=eskf_sim,
-            INIT_FROM_GT=True,
+            INIT_FROM_GT=False,
+            INITIAL_RANGE_GUESS=scale * TRUE_RANGE,
         )
         plotter.show()
 
         res = extract_eskf_result(
             plotter,
-            experiment="exp1",
+            experiment="exp2",
             scenario="bearing-only",
             estimator="ESKF",
-            sigma_a=float(sigma_a),
+            init_range_scale=float(scale),
             run_idx=0,
             divergence_threshold=10.0,
         )
         results.append(res)
 
     df = results_to_dataframe(results)
-    save_results_csv(df, str(outdir / "exp1_results.csv"))
+    save_results_csv(df, str(outdir / "exp2_range_scale_results.csv"))
 
     figs = generate_sigma_figures(df)
     save_figures(figs, str(outdir / "figures"))
 
-    print(f"Wrote {outdir / 'exp1_results.csv'}")
+    print(f"Wrote {outdir / 'exp2_range_scale_results.csv'}")
     print(f"Wrote figures to {outdir / 'figures'}")
 
 if __name__ == "__main__":

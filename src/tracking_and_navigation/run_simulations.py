@@ -48,7 +48,7 @@ from tracking_and_navigation.tuning_sim import (
 # SOUND_SPEED    = 1500.0
 
 
-def run_simulations_s1(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, SOUND_SPEED, TDMA_FREQ, SAVE_DIR, ESKF_SIM, INIT_FROM_GT=False, INITIAL_RANGE_SCALE=10.0):
+def run_simulations_s1(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, SOUND_SPEED, TDMA_FREQ, SAVE_DIR, ESKF_SIM, INIT_FROM_GT=False, INITIAL_RANGE_GUESS=10.0):
 
     imu_sim = ESKF_SIM.modelImuAsv
     _cv_sim = ESKF_SIM.modelCvRov
@@ -113,7 +113,7 @@ def run_simulations_s1(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, S
             z_usbl_tseq=z_usbl_tseq,
             z_range_tseq=z_range_tseq,
             z_depth_tseq=z_depth_tseq,
-            range_guess=INITIAL_RANGE_SCALE,
+            range_guess=INITIAL_RANGE_GUESS,
         )
 
     traj_name = TRAJECTORY_TYPE.value
@@ -446,8 +446,8 @@ def _init_rov_from_gt(
     rov_err_init_std_sim = np.repeat(
         repeats=3,
         a=[
-            0.0,    # pos
-            0.0,    # vel
+            2.0,    # pos
+            0.2,    # vel
         ],
     )
     asv_err_init_std_sim = np.repeat(

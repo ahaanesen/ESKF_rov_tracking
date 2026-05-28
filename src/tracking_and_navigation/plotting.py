@@ -767,9 +767,9 @@ class PlotterESKFJoint:
     def show(self):
         self.to_csv_estimated_values()
         self.export_statistics()
-        # self._save(self.plot3d(), "3d_trajectory")
-        # self._save(self.plot_rmse_rov(), "rmse_rov")
-        # self._save(self.plot_rmse_asv(), "rmse_asv")
+        self._save(self.plot3d(), "3d_trajectory")
+        self._save(self.plot_rmse_rov(), "rmse_rov")
+        self._save(self.plot_rmse_asv(), "rmse_asv")
         # self._save(self.plot_rov_position(), "rov_position")
         # self._save(self.plot_asv_position(), "asv_position")
         # self._save(self.plot_rov_position_error(), "rov_position_error")

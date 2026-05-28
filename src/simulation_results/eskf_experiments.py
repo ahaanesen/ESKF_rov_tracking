@@ -28,7 +28,7 @@ class ExperimentResult:
 
     sigma_a: float | None = None
     tdma_interval: float | None = None
-    init_scale: float | None = None
+    init_range_scale: float | None = None
 
     run_idx: int = 0
 
@@ -53,7 +53,7 @@ def extract_eskf_result(
     estimator: str = "ESKF",
     sigma_a: float = None,
     tdma_interval: float = None,
-    init_scale: float = None,
+    init_range_scale: float = None,
     run_idx: int = 0,
     divergence_threshold: float = 10.0,
 ) -> ExperimentResult:
@@ -128,7 +128,7 @@ def extract_eskf_result(
 
         sigma_a=sigma_a,
         tdma_interval=tdma_interval,
-        init_scale=init_scale,
+        init_range_scale=init_range_scale,
 
         run_idx=run_idx,
 
@@ -201,7 +201,7 @@ def summarize_initialization_experiment(
 ) -> pd.DataFrame:
 
     out = (
-        df.groupby("init_scale")
+        df.groupby("init_range_scale")
         .agg(
             rmse_mean=("rmse", "mean"),
             rmse_std=("rmse", "std"),
@@ -214,7 +214,7 @@ def summarize_initialization_experiment(
             nees_mean=("mean_nees", "mean"),
         )
         .reset_index()
-        .sort_values("init_scale")
+        .sort_values("init_range_scale")
     )
 
     return out
@@ -338,7 +338,7 @@ def plot_init_convergence(
 
     fig, ax = _prepare_figure()
 
-    x = s["init_scale"].values
+    x = s["init_range_scale"].values
     y = s["convergence_rate"].values
 
     ax.plot(
