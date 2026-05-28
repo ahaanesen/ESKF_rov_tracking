@@ -26,11 +26,9 @@ class ModelIMU:
 
     accm_std: float
     accm_bias_std: float
-    accm_bias_p: float
 
     gyro_std: float
     gyro_bias_std: float
-    gyro_bias_p: float
 
     accm_correction: "np.ndarray"  # (3,3)
     gyro_correction: "np.ndarray"  # (3,3)

@@ -46,12 +46,11 @@ gyro_corr = np.eye(3)
 # Models
 # -----------------------------------------------------------------------------
 imu_sim = ModelIMU(
-    accm_std=1.167e-3,
-    accm_bias_std=4e-3,
-    accm_bias_p=1e-16,
-    gyro_std=4.36e-5,
-    gyro_bias_std=5e-5,
-    gyro_bias_p=1e-16,
+    accm_std=4.363e-3,
+    gyro_std=1.1667e-3,
+    accm_bias_std=4.9e-4,
+    gyro_bias_std=2.4e-6,
+
     accm_correction=accm_corr,
     gyro_correction=gyro_corr,
 )
@@ -64,8 +63,8 @@ cv_sim = ModelCV(
 # Sensors
 # -----------------------------------------------------------------------------
 gnss_sim = SensorGNSS_ASV(
-    gnss_std_ne=0.3,
-    gnss_std_d=0.5,
+    gnss_std_ne=1.5,
+    gnss_std_d=2.0,
     lever_arm=gnss_lever_arm,
 )
 
@@ -77,12 +76,12 @@ usbl_sim = SensorUSBL_Joint(
 )
 
 range_sim = SensorRange_Joint(
-    range_std=0.5,
+    range_std=0.3,
     lever_arm=usbl_lever_arm,
 )
 
 depth_sim = SensorDepth_ROV(
-    depth_std=0.3,
+    depth_std=1.5,
 )
 
 # -----------------------------------------------------------------------------
@@ -121,6 +120,8 @@ rov_err_init_std_sim = np.repeat(
         0.1,    # vel
     ],
 )
+
+initial_range_scale = 10.0  # meters, to make initial range errors more visible in plots
 
 P0 = np.diag(np.concatenate((asv_err_init_std_sim, rov_err_init_std_sim)) ** 2)
 

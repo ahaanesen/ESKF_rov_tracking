@@ -83,7 +83,7 @@ def _error_stats_from_errvec(err3: np.ndarray) -> dict:
             "median": np.nan,
             "p95": np.nan,
             "max": np.nan,
-            "final": np.nan,
+            "final_error": np.nan,
             "ate_rms": np.nan,
             "mean_abs_n": np.nan,
             "mean_abs_e": np.nan,
@@ -100,7 +100,7 @@ def _error_stats_from_errvec(err3: np.ndarray) -> dict:
         "median": float(np.median(dist)),
         "p95": float(np.percentile(dist, 95)),
         "max": float(np.max(dist)),
-        "final": float(dist[-1]),
+        "final_error": float(dist[-1]),
         "ate_rms": float(np.sqrt(np.mean(dist**2))),
         "mean_abs_n": float(np.mean(np.abs(err3[:, 0]))),
         "mean_abs_e": float(np.mean(np.abs(err3[:, 1]))),
@@ -524,10 +524,10 @@ class PlotterESKFJoint:
                 # "path_length_gt": float(pl_gt),
                 # "path_length_est": float(pl_est),
                 #"path_length_error_pct": float(100.0 * abs(pl_est - pl_gt) / pl_gt) if pl_gt > 0 else np.nan,
-                "mean_nees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
-                "mean_nees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
-                "anees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
-                "anees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
+                "mean_tanees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
+                "mean_tanees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
+                "tanees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
+                "tanees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
                 "scenario": self.scenario_name,
                 "platform": "ROV",
                 #**{f"vel_{k}": v for k, v in vel_stats.items()},
@@ -576,10 +576,10 @@ class PlotterESKFJoint:
                 # "path_length_gt": float(pl_gt),
                 # "path_length_est": float(pl_est),
                 # "path_length_error_pct": float(100.0 * abs(pl_est - pl_gt) / pl_gt) if pl_gt > 0 else np.nan,
-                "mean_nees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
-                "mean_nees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
-                "anees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
-                "anees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
+                "mean_tanees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
+                "mean_tanees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
+                "tanees_pos": float(np.nanmean(nees_pos_vals)) if nees_pos_vals else np.nan,
+                "tanees_vel": float(np.nanmean(nees_vel_vals)) if nees_vel_vals else np.nan,
                 "scenario": self.scenario_name,
                 "platform": "ASV",
                 # **{f"vel_{k}": v for k, v in vel_stats.items()},
@@ -767,14 +767,14 @@ class PlotterESKFJoint:
     def show(self):
         self.to_csv_estimated_values()
         self.export_statistics()
-        self._save(self.plot3d(), "3d_trajectory")
-        self._save(self.plot_rmse_rov(), "rmse_rov")
-        self._save(self.plot_rmse_asv(), "rmse_asv")
+        # self._save(self.plot3d(), "3d_trajectory")
+        # self._save(self.plot_rmse_rov(), "rmse_rov")
+        # self._save(self.plot_rmse_asv(), "rmse_asv")
         # self._save(self.plot_rov_position(), "rov_position")
         # self._save(self.plot_asv_position(), "asv_position")
         # self._save(self.plot_rov_position_error(), "rov_position_error")
-        self._save(self.plot_nees(), "nees")
-        self._save(self.plot_nis(), "nis")
+        # self._save(self.plot_nees(), "nees")
+        # self._save(self.plot_nis(), "nis")
         # self._save(self.plot_usbl_measurements(), "usbl")
         # self._save(self.plot_range_measurements(), "range")
         plt.show(block=True)
