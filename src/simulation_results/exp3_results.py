@@ -50,7 +50,7 @@ TDMA_SLOT_LENGTHS = [5.0, 10.0, 20.0, 30.0, 60.0, 120.0]
 # TDMA_SLOT_LENGTHS = [5.0, 10.0, 20.0]
 
 def main():
-    outdir = Path("results/exp3_tdma_slot_length_joined_stats")
+    outdir = Path("results2/exp3_tdma")
     outdir.mkdir(parents=True, exist_ok=True)
 
     results = []

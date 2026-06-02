@@ -162,14 +162,14 @@ def main():
     parser = argparse.ArgumentParser(description="Generate figure-8 ground-truth plots.")
     parser.add_argument("--duration", type=float, default=300.0)
     parser.add_argument("--dt", type=float, default=0.01)
-    parser.add_argument("--out-dir", type=str, default="plots/gt_300s_original_deg")
+    parser.add_argument("--out-dir", type=str, default="plots/gt_300s_fig8")
     parser.add_argument("--show", action="store_true")
     args = parser.parse_args()
 
     asv_tseq, rov_tseq, _ = generate_trajectories(
         duration=args.duration,
         dt=args.dt,
-        trajectory_type=TrajectoryType.ORIGINAL_FIGURE_8,
+        trajectory_type=TrajectoryType.FIGURE_8,
     )
 
     t = _extract_times(asv_tseq)
