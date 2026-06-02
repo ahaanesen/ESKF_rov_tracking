@@ -773,11 +773,11 @@ class PlotterESKFJoint:
         # self._save(self.plot_rov_position(), "rov_position")
         # self._save(self.plot_asv_position(), "asv_position")
         # self._save(self.plot_rov_position_error(), "rov_position_error")
-        # self._save(self.plot_nees(), "nees")
+        self._save(self.plot_nees(), "nees")
         # self._save(self.plot_nis(), "nis")
         # self._save(self.plot_usbl_measurements(), "usbl")
         # self._save(self.plot_range_measurements(), "range")
-        plt.show(block=True)
+        plt.show(block=False)
 
     def _save(self, fig, name: str):
         if fig is None:

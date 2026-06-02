@@ -25,6 +25,7 @@ class ExperimentResult:
     estimator: str
     experiment: str
     scenario: str
+    vehicle: str = "ROV"
 
     sigma_a: float | None = None
     tdma_interval: float | None = None
@@ -45,6 +46,50 @@ class ExperimentResult:
 # Core extraction
 # =============================================================================
 
+def _results_from_statistics(
+    plotter: PlotterESKFJoint,
+    *,
+    experiment: str,
+    scenario: str,
+    estimator: str,
+    sigma_a: float | None,
+    tdma_interval: float | None,
+    init_range_scale: float | None,
+    run_idx: int,
+    divergence_threshold: float,
+) -> list[ExperimentResult]:
+    rows = plotter.collect_statistics_rows()
+    results = []
+    for row in rows:
+        vehicle = str(row.get("platform", "ROV"))
+        rmse = float(row.get("pos_ate_rms", np.nan))
+        final_error = float(row.get("pos_final_error", np.nan))
+        mean_nees = float(row.get("mean_tanees_pos", np.nan))
+        converged = bool(
+            np.isfinite(final_error)
+            and final_error < divergence_threshold
+        )
+
+        results.append(
+            ExperimentResult(
+                estimator=estimator,
+                experiment=experiment,
+                scenario=scenario,
+                vehicle=vehicle,
+                sigma_a=sigma_a,
+                tdma_interval=tdma_interval,
+                init_range_scale=init_range_scale,
+                run_idx=run_idx,
+                rmse=rmse,
+                ate=rmse,
+                final_error=final_error,
+                mean_nees=mean_nees,
+                converged=converged,
+            )
+        )
+    return results
+
+
 def extract_eskf_result(
     plotter: PlotterESKFJoint,
     *,
@@ -56,10 +101,24 @@ def extract_eskf_result(
     init_range_scale: float = None,
     run_idx: int = 0,
     divergence_threshold: float = 10.0,
-) -> ExperimentResult:
+) -> list[ExperimentResult]:
     """
     Extract standardized experiment metrics from a completed ESKF run.
     """
+
+    stats_results = _results_from_statistics(
+        plotter,
+        experiment=experiment,
+        scenario=scenario,
+        estimator=estimator,
+        sigma_a=sigma_a,
+        tdma_interval=tdma_interval,
+        init_range_scale=init_range_scale,
+        run_idx=run_idx,
+        divergence_threshold=divergence_threshold,
+    )
+    if stats_results:
+        return stats_results
 
     times = np.asarray(plotter.x_upds.times)
 
@@ -121,10 +180,11 @@ def extract_eskf_result(
         else np.nan
     )
 
-    return ExperimentResult(
+    return [ExperimentResult(
         estimator=estimator,
         experiment=experiment,
         scenario=scenario,
+        vehicle="ROV",
 
         sigma_a=sigma_a,
         tdma_interval=tdma_interval,
@@ -139,7 +199,7 @@ def extract_eskf_result(
         mean_nees=mean_nees,
 
         converged=converged,
-    )
+    )]
 
 
 # =============================================================================
@@ -177,9 +237,12 @@ def save_results_csv(
 def summarize_sigma_experiment(
     df: pd.DataFrame
 ) -> pd.DataFrame:
+    group_cols = ["sigma_a"]
+    if "vehicle" in df.columns:
+        group_cols.append("vehicle")
 
     out = (
-        df.groupby("sigma_a")
+        df.groupby(group_cols)
         .agg(
             rmse_mean=("rmse", "mean"),
             rmse_std=("rmse", "std"),
@@ -199,9 +262,12 @@ def summarize_sigma_experiment(
 def summarize_initialization_experiment(
     df: pd.DataFrame
 ) -> pd.DataFrame:
+    group_cols = ["init_range_scale"]
+    if "vehicle" in df.columns:
+        group_cols.append("vehicle")
 
     out = (
-        df.groupby("init_range_scale")
+        df.groupby(group_cols)
         .agg(
             rmse_mean=("rmse", "mean"),
             rmse_std=("rmse", "std"),
@@ -223,12 +289,12 @@ def summarize_initialization_experiment(
 def summarize_tdma_experiment(
     df: pd.DataFrame
 ) -> pd.DataFrame:
+    group_cols = ["tdma_interval", "scenario"]
+    if "vehicle" in df.columns:
+        group_cols.append("vehicle")
 
     out = (
-        df.groupby([
-            "tdma_interval",
-            "scenario",
-        ])
+        df.groupby(group_cols)
         .agg(
             rmse_mean=("rmse", "mean"),
             rmse_std=("rmse", "std"),
@@ -266,18 +332,35 @@ def plot_sigma_rmse(
 
     fig, ax = _prepare_figure()
 
-    x = s["sigma_a"].values
-    y = s["rmse_mean"].values
-    ystd = s["rmse_std"].fillna(0).values
+    if "vehicle" in s.columns:
+        for vehicle in s["vehicle"].unique():
+            sub = s[s["vehicle"] == vehicle]
+            x = sub["sigma_a"].values
+            y = sub["rmse_mean"].values
+            ystd = sub["rmse_std"].fillna(0).values
 
-    ax.plot(x, y, marker="o")
+            ax.plot(x, y, marker="o", label=vehicle)
 
-    ax.fill_between(
-        x,
-        y - ystd,
-        y + ystd,
-        alpha=0.2,
-    )
+            ax.fill_between(
+                x,
+                y - ystd,
+                y + ystd,
+                alpha=0.2,
+            )
+        ax.legend()
+    else:
+        x = s["sigma_a"].values
+        y = s["rmse_mean"].values
+        ystd = s["rmse_std"].fillna(0).values
+
+        ax.plot(x, y, marker="o")
+
+        ax.fill_between(
+            x,
+            y - ystd,
+            y + ystd,
+            alpha=0.2,
+        )
 
     ax.set_xscale("log")
 
@@ -297,15 +380,28 @@ def plot_sigma_nees(
 
     fig, ax = _prepare_figure()
 
-    x = s["sigma_a"].values
-    y = s["nees_mean"].values
+    if "vehicle" in s.columns:
+        for vehicle in s["vehicle"].unique():
+            sub = s[s["vehicle"] == vehicle]
+            x = sub["sigma_a"].values
+            y = sub["nees_mean"].values
 
-    ax.plot(
-        x,
-        y,
-        marker="o",
-        label="Mean NEES",
-    )
+            ax.plot(
+                x,
+                y,
+                marker="o",
+                label=f"{vehicle} mean NEES",
+            )
+    else:
+        x = s["sigma_a"].values
+        y = s["nees_mean"].values
+
+        ax.plot(
+            x,
+            y,
+            marker="o",
+            label="Mean NEES",
+        )
 
     ax.axhline(
         3.0,
@@ -338,14 +434,25 @@ def plot_init_convergence(
 
     fig, ax = _prepare_figure()
 
-    x = s["init_range_scale"].values
-    y = s["convergence_rate"].values
+    if "vehicle" in s.columns:
+        for vehicle in s["vehicle"].unique():
+            sub = s[s["vehicle"] == vehicle]
+            ax.plot(
+                sub["init_range_scale"].values,
+                sub["convergence_rate"].values,
+                marker="o",
+                label=vehicle,
+            )
+        ax.legend()
+    else:
+        x = s["init_range_scale"].values
+        y = s["convergence_rate"].values
 
-    ax.plot(
-        x,
-        y,
-        marker="o",
-    )
+        ax.plot(
+            x,
+            y,
+            marker="o",
+        )
 
     ax.set_xscale("log")
 
@@ -374,26 +481,48 @@ def plot_init_final_error(
 
     fig, ax = _prepare_figure()
 
-    x = s["init_scale"].values
+    if "vehicle" in s.columns:
+        for vehicle in s["vehicle"].unique():
+            sub = s[s["vehicle"] == vehicle]
+            x = sub["init_range_scale"].values
+            y = sub["final_error_mean"].values
+            ystd = sub["final_error_std"].fillna(0).values
 
-    y = s["final_error_mean"].values
+            ax.plot(
+                x,
+                y,
+                marker="o",
+                label=vehicle,
+            )
 
-    ystd = s[
-        "final_error_std"
-    ].fillna(0).values
+            ax.fill_between(
+                x,
+                y - ystd,
+                y + ystd,
+                alpha=0.2,
+            )
+        ax.legend()
+    else:
+        x = s["init_range_scale"].values
 
-    ax.plot(
-        x,
-        y,
-        marker="o",
-    )
+        y = s["final_error_mean"].values
 
-    ax.fill_between(
-        x,
-        y - ystd,
-        y + ystd,
-        alpha=0.2,
-    )
+        ystd = s[
+            "final_error_std"
+        ].fillna(0).values
+
+        ax.plot(
+            x,
+            y,
+            marker="o",
+        )
+
+        ax.fill_between(
+            x,
+            y - ystd,
+            y + ystd,
+            alpha=0.2,
+        )
 
     ax.set_xscale("log")
 
@@ -425,19 +554,22 @@ def plot_tdma_rmse(
     fig, ax = _prepare_figure()
 
     scenarios = s["scenario"].unique()
+    vehicles = s["vehicle"].unique() if "vehicle" in s.columns else [None]
 
     for scenario in scenarios:
+        for vehicle in vehicles:
+            sub = s[s["scenario"] == scenario]
+            label = scenario
+            if vehicle is not None:
+                sub = sub[sub["vehicle"] == vehicle]
+                label = f"{scenario} ({vehicle})"
 
-        sub = s[
-            s["scenario"] == scenario
-        ]
-
-        ax.plot(
-            sub["tdma_interval"],
-            sub["rmse_mean"],
-            marker="o",
-            label=scenario,
-        )
+            ax.plot(
+                sub["tdma_interval"],
+                sub["rmse_mean"],
+                marker="o",
+                label=label,
+            )
 
     ax.set_xlabel(
         "TDMA Interval [s]"
@@ -465,24 +597,27 @@ def plot_tdma_divergence(
     fig, ax = _prepare_figure()
 
     scenarios = s["scenario"].unique()
+    vehicles = s["vehicle"].unique() if "vehicle" in s.columns else [None]
 
     for scenario in scenarios:
+        for vehicle in vehicles:
+            sub = s[s["scenario"] == scenario]
+            label = scenario
+            if vehicle is not None:
+                sub = sub[sub["vehicle"] == vehicle]
+                label = f"{scenario} ({vehicle})"
 
-        sub = s[
-            s["scenario"] == scenario
-        ]
+            divergence_rate = (
+                1.0
+                - sub["convergence_rate"]
+            )
 
-        divergence_rate = (
-            1.0
-            - sub["convergence_rate"]
-        )
-
-        ax.plot(
-            sub["tdma_interval"],
-            divergence_rate,
-            marker="o",
-            label=scenario,
-        )
+            ax.plot(
+                sub["tdma_interval"],
+                divergence_rate,
+                marker="o",
+                label=label,
+            )
 
     ax.set_ylim([0, 1.05])
 
@@ -512,19 +647,22 @@ def plot_tdma_nees(
     fig, ax = _prepare_figure()
 
     scenarios = s["scenario"].unique()
+    vehicles = s["vehicle"].unique() if "vehicle" in s.columns else [None]
 
     for scenario in scenarios:
+        for vehicle in vehicles:
+            sub = s[s["scenario"] == scenario]
+            label = scenario
+            if vehicle is not None:
+                sub = sub[sub["vehicle"] == vehicle]
+                label = f"{scenario} ({vehicle})"
 
-        sub = s[
-            s["scenario"] == scenario
-        ]
-
-        ax.plot(
-            sub["tdma_interval"],
-            sub["nees_mean"],
-            marker="o",
-            label=scenario,
-        )
+            ax.plot(
+                sub["tdma_interval"],
+                sub["nees_mean"],
+                marker="o",
+                label=label,
+            )
 
     ax.axhline(
         3.0,

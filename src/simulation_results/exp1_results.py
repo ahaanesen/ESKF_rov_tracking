@@ -36,7 +36,7 @@ TDMA_FREQ      = 0.2  # 1 msg / 5 s
 SIGMA_VALUES = [0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 1.0]
 
 def main():
-    outdir = Path("results_exp1_cv_tuning_fixed")
+    outdir = Path("results/exp1_cv_joined_stats")
     outdir.mkdir(parents=True, exist_ok=True)
 
     results = []
@@ -71,7 +71,7 @@ def main():
             run_idx=0,
             divergence_threshold=10.0,
         )
-        results.append(res)
+        results.extend(res)
 
     df = results_to_dataframe(results)
     save_results_csv(df, str(outdir / "exp1_results.csv"))
