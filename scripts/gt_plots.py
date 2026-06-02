@@ -13,6 +13,14 @@ import math
 import numpy as np
 from matplotlib import pyplot as plt
 
+# plt.rcParams.update(
+#     {
+#         "font.family": "serif",
+#         "font.serif": ["CMU Serif", "Computer Modern", "cmr10", "DejaVu Serif"],
+#         "mathtext.fontset": "cm",
+#     }
+# )
+plt.rcParams.update(    {        "font.family": "serif",        "font.serif": ["CMU Serif", "DejaVu Serif"],        "mathtext.fontset": "cm",        "axes.formatter.use_mathtext": True,        "axes.unicode_minus": False,    })
 # Ensure workspace src/ is on sys.path when running this file directly.
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_SRC = WORKSPACE_ROOT / "src"
@@ -23,7 +31,6 @@ from tracking_and_navigation.generate_trajectories import (
     generate_trajectories,
     TrajectoryType,
 )
-from utils.angles import wrap_to_pi
 
 
 def _yaw_from_rotmat(R_nb: np.ndarray) -> float:
@@ -36,14 +43,6 @@ def _extract_positions(tseq) -> np.ndarray:
 
 def _extract_times(tseq) -> np.ndarray:
     return np.asarray(tseq.times, dtype=float)
-
-
-# -----------------------------
-# NEW: detect angle wrapping
-# -----------------------------
-def _find_wrap_indices(angle: np.ndarray) -> np.ndarray:
-    d = np.diff(angle)
-    return np.where(np.abs(d) > np.pi)[0]
 
 
 # -----------------------------
@@ -107,7 +106,7 @@ def _plot_trajectories(asv_pos: np.ndarray, rov_pos: np.ndarray, t: np.ndarray,
     fig.tight_layout()
 
     if out_path is not None:
-        fig.savefig(out_path, dpi=200)
+        fig.savefig(out_path, bbox_inches="tight")
 
     return fig
 
@@ -119,6 +118,8 @@ def _plot_geometry(t: np.ndarray, bearing: np.ndarray, heading: np.ndarray, slan
                    out_path: Path | None):
 
     fig, axs = plt.subplots(3, 1, figsize=(8.0, 7.5), sharex=True)
+    bearing = np.unwrap(bearing)
+    heading = np.unwrap(heading)
 
     # ---- Bearing ----
     axs[0].plot(t, np.degrees(bearing), color="C2")
@@ -126,22 +127,11 @@ def _plot_geometry(t: np.ndarray, bearing: np.ndarray, heading: np.ndarray, slan
     axs[0].set_title("Bearing angle (USV to ROV)")
     axs[0].grid(True, alpha=0.3)
 
-    wrap_idx_bearing = _find_wrap_indices(bearing)
-    for idx in wrap_idx_bearing:
-        axs[0].axvline(t[idx], color="C2", linestyle="--", alpha=0.6)
-
-    axs[0].text(0.02, 0.9, "Wrapped to [-180, 180] deg",
-                transform=axs[0].transAxes, fontsize=9)
-
     # ---- Heading ----
     axs[1].plot(t, np.degrees(heading), color="C0")
     axs[1].set_ylabel("Heading [deg]")
     axs[1].set_title("USV heading")
     axs[1].grid(True, alpha=0.3)
-
-    wrap_idx_heading = _find_wrap_indices(heading)
-    for idx in wrap_idx_heading:
-        axs[1].axvline(t[idx], color="C0", linestyle="--", alpha=0.6)
 
     # ---- Slant range ----
     axs[2].plot(t, slant_range, color="C1")
@@ -153,7 +143,7 @@ def _plot_geometry(t: np.ndarray, bearing: np.ndarray, heading: np.ndarray, slan
     fig.tight_layout()
 
     if out_path is not None:
-        fig.savefig(out_path, dpi=200)
+        fig.savefig(out_path, bbox_inches="tight")
 
     return fig
 
@@ -162,7 +152,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate figure-8 ground-truth plots.")
     parser.add_argument("--duration", type=float, default=300.0)
     parser.add_argument("--dt", type=float, default=0.01)
-    parser.add_argument("--out-dir", type=str, default="plots/gt_300s_fig8")
+    parser.add_argument("--out-dir", type=str, default="plots/gt_300s_fig8_unwrapped")
     parser.add_argument("--show", action="store_true")
     args = parser.parse_args()
 
@@ -177,19 +167,16 @@ def main():
     rov_pos = _extract_positions(rov_tseq)
 
     d = rov_pos - asv_pos
-    bearing = np.array([wrap_to_pi(math.atan2(de, dn)) for dn, de, _ in d])
+    bearing = np.array([math.atan2(de, dn) for dn, de, _ in d])
 
-    heading = np.array([
-        _yaw_from_rotmat(s.ori.as_rotmat()) for s in asv_tseq.values
-    ])
-    heading = np.array([wrap_to_pi(h) for h in heading])
+    heading = np.array([_yaw_from_rotmat(s.ori.as_rotmat()) for s in asv_tseq.values])
 
     slant_range = np.linalg.norm(d, axis=1)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    traj_path = out_dir / "sim_trajectories.png"
-    geom_path = out_dir / "sim_geometry.png"
+    traj_path = out_dir / "sim_trajectories.svg"
+    geom_path = out_dir / "sim_geometry.svg"
 
     _plot_trajectories(asv_pos, rov_pos, t, traj_path)
     _plot_geometry(t, bearing, heading, slant_range, geom_path)

@@ -17,5 +17,3 @@ datasets/*
 results_exp1_cv_tuning_fixed/*
 results_exp2_range_scale_tuning_notMC/*
 results_old/*
-
-scripts/plots*
