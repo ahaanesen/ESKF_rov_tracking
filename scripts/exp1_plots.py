@@ -37,42 +37,42 @@ class TrajectoryType(str, Enum):
     FIGURE_8   = "figure_8"
     LINEAR_TURNS = "linear_turns"
 
-TRAJECTORY_TYPE = TrajectoryType.LINEAR_TURNS
+TRAJECTORY_TYPE = TrajectoryType.FIGURE_8
     
 exp1_eskf_results = """
 estimator,experiment,scenario,vehicle,sigma_a,tdma_interval,init_range_scale,packet_loss_prob,run_idx,rmse,ate,final_error,mean_nees,converged
-ESKF,exp1,bearing-only,ROV,0.005,,,,0,3.9499063779355295,3.9499063779355295,2.1821256942821243,1.7640490052468927,True
-ESKF,exp1,bearing-only,ASV,0.005,,,,0,1.273874340793982,1.273874340793982,1.239217223348542,2.330681330127901,True
-ESKF,exp1,bearing-only,ROV,0.01,,,,0,3.223106168722343,3.223106168722343,1.683885406137093,1.3143779110986598,True
-ESKF,exp1,bearing-only,ASV,0.01,,,,0,1.3979450006094776,1.3979450006094776,0.9504812138579132,2.7710695732275235,True
-ESKF,exp1,bearing-only,ROV,0.02,,,,0,9.193567196153184,9.193567196153184,15.28360062328699,1.6535339367535375,False
-ESKF,exp1,bearing-only,ASV,0.02,,,,0,1.3449974234079605,1.3449974234079605,2.404942056094326,2.4779787574765075,True
-ESKF,exp1,bearing-only,ROV,0.05,,,,0,21.116167498295614,21.116167498295614,45.46711560985405,1.5990747463762078,False
-ESKF,exp1,bearing-only,ASV,0.05,,,,0,1.3368735869405814,1.3368735869405814,0.6219840673766317,2.635653308776685,True
-ESKF,exp1,bearing-only,ROV,0.1,,,,0,47.29803918181772,47.29803918181772,131.09903928609918,2.1629577640679494,False
-ESKF,exp1,bearing-only,ASV,0.1,,,,0,1.3726462841180067,1.3726462841180067,0.9172763999045199,2.6213799180266366,True
-ESKF,exp1,bearing-only,ROV,0.5,,,,0,895.4587503802459,895.4587503802459,1926.2936693966974,20.380234274248743,False
-ESKF,exp1,bearing-only,ASV,0.5,,,,0,1.418151799174189,1.418151799174189,1.6444556257550798,2.812477793890941,True
-ESKF,exp1,bearing-only,ROV,1.0,,,,0,1689.3033787105123,1689.3033787105123,3616.3344616393742,22.878195031810517,False
-ESKF,exp1,bearing-only,ASV,1.0,,,,0,1.4517658011917463,1.4517658011917463,1.9418500058747457,3.1249811160203653,True
+ESKF,exp1,bearing-only,ROV,0.005,,,,0,3.6152570827897037,3.6152570827897037,6.636447625834557,10.798121248266488,True
+ESKF,exp1,bearing-only,ASV,0.005,,,,0,1.3309371073809362,1.3309371073809362,1.7303414606729304,3.168930079976048,True
+ESKF,exp1,bearing-only,ROV,0.01,,,,0,2.7311454630535303,2.7311454630535303,0.6863889678463387,3.858437250786805,True
+ESKF,exp1,bearing-only,ASV,0.01,,,,0,1.2637820996380167,1.2637820996380167,0.8290037881461129,2.765508977870145,True
+ESKF,exp1,bearing-only,ROV,0.02,,,,0,3.559782015170971,3.559782015170971,0.6381261191899648,2.9654426019734577,True
+ESKF,exp1,bearing-only,ASV,0.02,,,,0,1.332716962607181,1.332716962607181,0.9964197113307957,2.8466987357494657,True
+ESKF,exp1,bearing-only,ROV,0.05,,,,0,4.796425989764966,4.796425989764966,4.496005329375376,2.9024089824738812,True
+ESKF,exp1,bearing-only,ASV,0.05,,,,0,1.3950270002302119,1.3950270002302119,0.6916671299949243,2.9223925401983113,True
+ESKF,exp1,bearing-only,ROV,0.1,,,,0,10.687787063290875,10.687787063290875,22.413201058580086,3.5368416448257403,False
+ESKF,exp1,bearing-only,ASV,0.1,,,,0,1.4900516125993069,1.4900516125993069,1.1441865078359394,3.3815733317684753,True
+ESKF,exp1,bearing-only,ROV,0.5,,,,0,266.6766659419769,266.6766659419769,535.4705433500873,130.21809179423659,False
+ESKF,exp1,bearing-only,ASV,0.5,,,,0,1.2457231855348736,1.2457231855348736,1.5573442853875938,2.169301359913301,True
+ESKF,exp1,bearing-only,ROV,1.0,,,,0,519.1510109383509,519.1510109383509,1114.712437618321,123.90957967409928,False
+ESKF,exp1,bearing-only,ASV,1.0,,,,0,1.3369557649572605,1.3369557649572605,0.9224767956657481,2.615474606033414,True
 """
 
 exp1_fgo_results = """ 
 estimator,experiment,scenario,platform,sigma_a,tdma_interval,init_range_scale,rmse,ate,final_error,mean_nees,converged
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.005,5.0,GT init,7.688851813839472,7.688851813839472,3.116441844686936,5.200910223244082,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.005,5.0,GT init,11.810706147682364,11.810706147682364,1.4371889232780273,3.1013623435644777,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.01,5.0,GT init,8.652271568991777,8.652271568991777,3.760665279064407,5.14830056172258,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.01,5.0,GT init,1.7705836783640858,1.7705836783640858,1.588448087991858,3.0982607763321175,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.02,5.0,GT init,8.036619275383616,8.036619275383616,3.55571034960276,4.556133453534396,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.02,5.0,GT init,1.7701848175115966,1.7701848175115966,1.644147465777914,3.095903010053548,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.05,5.0,GT init,104.8188137129204,104.8188137129204,226.5639454508721,3.800394897812817,False
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.05,5.0,GT init,1.7852472969785582,1.7852472969785582,1.474601634768175,3.102676208640824,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.1,5.0,GT init,104.15775581699448,104.15775581699448,210.82527679960316,4.651716494606948,False
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.1,5.0,GT init,1.7797589258350277,1.7797589258350277,1.6923307336306264,3.1298988056260244,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.5,5.0,GT init,464.29772279996854,464.29772279996854,174.1501468258165,3.449530287484732,False
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.5,5.0,GT init,1.7093102261076405,1.7093102261076405,3.049075993018863,3.1329123291200105,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,1.0,5.0,GT init,498.8268069985549,498.8268069985549,252.06496401643133,3.5453874035570263,False
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,1.0,5.0,GT init,1.750792086983874,1.750792086983874,1.5250726388324054,3.0718470098740185,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.005,5.0,GT init,3.3867476356657074,3.3867476356657074,2.877077269256992,3.5372424337763553,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.005,5.0,GT init,1.6975756609980517,1.6975756609980517,1.1944402382894526,3.094857602223015,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.01,5.0,GT init,3.0137199022156644,3.0137199022156644,2.391592788330604,3.3981498971313204,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.01,5.0,GT init,1.692630818597605,1.692630818597605,1.3750437035954384,3.0924283879640933,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.02,5.0,GT init,2.916862534964018,2.916862534964018,3.3253016044601313,3.3529219792426983,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.02,5.0,GT init,1.7017996822887955,1.7017996822887955,1.2908739033708043,3.0872786090007716,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.05,5.0,GT init,2.7052708457495083,2.7052708457495083,6.4911267537170705,3.1458610158810107,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.05,5.0,GT init,1.724630490501401,1.724630490501401,1.2713366680368232,3.0795385632351167,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.1,5.0,GT init,5.898152050526624,5.898152050526624,10.294719979586558,3.454098326891233,False
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.1,5.0,GT init,1.738171829439968,1.738171829439968,1.3130692360249077,3.067349790303165,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.5,5.0,GT init,38.658262882654014,38.658262882654014,19.438081273486,3.1176644718189417,False
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.5,5.0,GT init,1.7142698718699554,1.7142698718699554,0.8814343724252003,3.059073107722251,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,1.0,5.0,GT init,25.538982540726685,25.538982540726685,29.34993696984155,4.003193665268199,False
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,1.0,5.0,GT init,1.7499419097446305,1.7499419097446305,1.7172751351989557,3.06675163945781,True
 """
 
 SCENARIO_LABELS = ["B", "B+R", "B+R+D"]
@@ -129,25 +129,65 @@ def _chi2_95_interval_3dof() -> tuple[float, float]:
         return 0.072, 3.116
 
 
+# def _plot_metric(ax, rows: list[dict], vehicle: str, metric: str, ylabel: str) -> None:
+#     marker_map = {"ESKF": "o", "FGO": "s"}
+#     for estimator in ESTIMATOR_ORDER:
+#         for scenario in SCENARIO_LABELS:
+#             series = [r for r in rows if r["vehicle"] == vehicle and r["estimator"] == estimator and r["scenario"] == scenario]
+#             if not series:
+#                 continue
+#             series = sorted(series, key=lambda r: r["sigma_a"])
+#             sigmas = [r["sigma_a"] for r in series]
+#             values = [r[metric] for r in series]
+#             label = f"{estimator} {scenario}"
+#             ax.plot(sigmas, values, marker=marker_map.get(estimator, "o"), label=label)
+
+#     # ax.set_xlabel("sigma_a")
+#     ax.set_xlabel(r"$\sigma_a$")
+#     ax.set_ylabel(ylabel)
+#     ax.set_xscale("log")
+#     ax.set_yscale("log")
+#     ax.set_title(vehicle)
+#     ax.grid(True, linestyle="--", alpha=0.4)
 def _plot_metric(ax, rows: list[dict], vehicle: str, metric: str, ylabel: str) -> None:
     marker_map = {"ESKF": "o", "FGO": "s"}
+
+    # Map display label -> dataset label
+    vehicle_map = {
+        "UUV": "ROV",
+        "USV": "ASV",
+    }
+
+    dataset_vehicle = vehicle_map.get(vehicle, vehicle)
+
     for estimator in ESTIMATOR_ORDER:
         for scenario in SCENARIO_LABELS:
-            series = [r for r in rows if r["vehicle"] == vehicle and r["estimator"] == estimator and r["scenario"] == scenario]
+            series = [
+                r for r in rows
+                if r["vehicle"] == dataset_vehicle
+                and r["estimator"] == estimator
+                and r["scenario"] == scenario
+            ]
             if not series:
                 continue
+
             series = sorted(series, key=lambda r: r["sigma_a"])
             sigmas = [r["sigma_a"] for r in series]
             values = [r[metric] for r in series]
             label = f"{estimator} {scenario}"
-            ax.plot(sigmas, values, marker=marker_map.get(estimator, "o"), label=label)
 
-    # ax.set_xlabel("sigma_a")
+            ax.plot(sigmas, values,
+                    marker=marker_map.get(estimator, "o"),
+                    label=label)
+
     ax.set_xlabel(r"$\sigma_a$")
     ax.set_ylabel(ylabel)
     ax.set_xscale("log")
     ax.set_yscale("log")
+
+    # 👇 This now shows UUV / USV
     ax.set_title(vehicle)
+
     ax.grid(True, linestyle="--", alpha=0.4)
 
 
@@ -172,19 +212,19 @@ def main() -> None:
     fgo_rows = _parse_results(exp1_fgo_results, "platform")
     rows = eskf_rows + fgo_rows
 
-    fig_ate, axes_ate = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
-    _plot_metric(axes_ate[0], rows, "ROV", "ate", "ATE (RMSE)")
-    _plot_metric(axes_ate[1], rows, "ASV", "ate", "ATE (RMSE)")
+    fig_ate, axes_ate = plt.subplots(2, 1, figsize=(7.5, 7.5), sharey=True)
+    _plot_metric(axes_ate[0], rows, "UUV", "ate", "ATE (RMSE)")
+    _plot_metric(axes_ate[1], rows, "USV", "ate", "ATE (RMSE)")
     axes_ate[1].legend(loc="upper right", fontsize=8)
     fig_ate.suptitle(rf"{gt_traj}: ATE (RMSE) vs $\sigma_a$", fontsize=14)
     fig_ate.tight_layout(rect=[0, 0, 1, 0.94])
 
-    fig_nees, axes_nees = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
+    fig_nees, axes_nees = plt.subplots(2, 1, figsize=(7.5, 7.5), sharey=True)
     lower, upper = _chi2_95_interval_3dof()
     for ax in axes_nees:
         ax.axhspan(lower, upper, color="grey", alpha=0.15, label=r"$\,\chi^2_{0.95,3}$")
-    _plot_metric(axes_nees[0], rows, "ROV", "mean_nees", "NEES")
-    _plot_metric(axes_nees[1], rows, "ASV", "mean_nees", "NEES")
+    _plot_metric(axes_nees[0], rows, "UUV", "mean_nees", "NEES")
+    _plot_metric(axes_nees[1], rows, "USV", "mean_nees", "NEES")
     axes_nees[1].legend(loc="upper right", fontsize=8)
     fig_nees.suptitle(rf"{gt_traj}: NEES vs $\sigma_a$", fontsize=14)
     fig_nees.tight_layout(rect=[0, 0, 1, 0.94])

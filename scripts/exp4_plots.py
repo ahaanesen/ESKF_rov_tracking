@@ -174,16 +174,21 @@ def _chi2_95_interval_3dof() -> tuple[float, float]:
 # 	ax.grid(True, linestyle="--", alpha=0.4)
 def _plot_metric(ax, rows: list[dict], vehicle: str, metric: str, ylabel: str) -> None:
     marker_map = {"ESKF": "o", "FGO": "s"}
+	
+    vehicle_map = {
+			"UUV": "ROV",
+			"USV": "ASV",
+	}
+    dataset_vehicle = vehicle_map.get(vehicle, vehicle)
 
     for estimator in ESTIMATOR_ORDER:
-        for scenario in SCENARIO_LABELS:
+        for scenario in SCENARIO_LABELS: 
             series = [
-                r
-                for r in rows
-                if r["vehicle"] == vehicle
-                and r["estimator"] == estimator
-                and r["scenario"] == scenario
-            ]
+				r for r in rows
+				if r["vehicle"] == dataset_vehicle
+				and r["estimator"] == estimator
+				and r["scenario"] == scenario
+			]
 
             if not series:
                 continue
@@ -227,19 +232,19 @@ def main() -> None:
 	fgo_rows = _parse_results(exp4_fgo_results, "platform")
 	rows = eskf_rows + fgo_rows
 
-	fig_ate, axes_ate = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
-	_plot_metric(axes_ate[0], rows, "ROV", "ate", "ATE (RMSE)")
-	_plot_metric(axes_ate[1], rows, "ASV", "ate", "ATE (RMSE)")
+	fig_ate, axes_ate = plt.subplots(2, 1, figsize=(7.5, 7.5), sharey=True)
+	_plot_metric(axes_ate[0], rows, "UUV", "ate", "ATE (RMSE)")
+	_plot_metric(axes_ate[1], rows, "USV", "ate", "ATE (RMSE)")
 	axes_ate[1].legend(loc="upper right", fontsize=8)
 	fig_ate.suptitle(rf"{gt_traj}: ATE (RMSE) vs Packet Loss Probability", fontsize=14)
 	fig_ate.tight_layout()
 
-	fig_nees, axes_nees = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
+	fig_nees, axes_nees = plt.subplots(2, 1, figsize=(7.5, 7.5), sharey=True)
 	lower, upper = _chi2_95_interval_3dof()
 	for ax in axes_nees:
 		ax.axhspan(lower, upper, color="grey", alpha=0.15, label=r"$\chi^2_{0.95,3}$")
-	_plot_metric(axes_nees[0], rows, "ROV", "mean_nees", "NEES")
-	_plot_metric(axes_nees[1], rows, "ASV", "mean_nees", "NEES")
+	_plot_metric(axes_nees[0], rows, "UUV", "mean_nees", "NEES")
+	_plot_metric(axes_nees[1], rows, "USV", "mean_nees", "NEES")
 	axes_nees[1].legend(loc="upper right", fontsize=8)
 	fig_nees.suptitle(rf"{gt_traj}: NEES vs Packet Loss Probability", fontsize=14)
 	fig_nees.tight_layout()

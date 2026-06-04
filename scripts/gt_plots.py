@@ -77,17 +77,17 @@ def deg_formatter(x, pos):
 
 
 def _plot_trajectories(asv_pos: np.ndarray, rov_pos: np.ndarray, t: np.ndarray,
-                       out_path: Path | None):
+                       out_path: Path | None, title_traj: str):
 
-    fig, axs = plt.subplots(2, 1, figsize=(7.5, 9.0),
+    fig, axs = plt.subplots(2, 1, figsize=(7.5, 7.5),
                              gridspec_kw={"height_ratios": [2, 1]})
     ax = axs[0]
 
     ax.plot(asv_pos[:, 0], asv_pos[:, 1], color="C0", label="USV")
-    ax.plot(rov_pos[:, 0], rov_pos[:, 1], color="C1", label="ROV")
+    ax.plot(rov_pos[:, 0], rov_pos[:, 1], color="C1", label="UUV")
 
     ax.scatter(asv_pos[0, 0], asv_pos[0, 1], color="C0", marker="o", s=60, label="USV start")
-    ax.scatter(rov_pos[0, 0], rov_pos[0, 1], color="C1", marker="o", s=60, label="ROV start")
+    ax.scatter(rov_pos[0, 0], rov_pos[0, 1], color="C1", marker="o", s=60, label="UUV start")
 
     def add_path_arrows(pos, color):
         n = len(pos)
@@ -115,7 +115,7 @@ def _plot_trajectories(asv_pos: np.ndarray, rov_pos: np.ndarray, t: np.ndarray,
 
     ax.set_xlabel("North [m]")
     ax.set_ylabel("East [m]")
-    ax.set_title("Ground-truth top-down view")
+    ax.set_title(f"Ground-truth top-down view")
     ax.axis("equal")
     ax.grid(True, alpha=0.3)
     ax.legend(loc="best", fontsize="small")
@@ -123,14 +123,15 @@ def _plot_trajectories(asv_pos: np.ndarray, rov_pos: np.ndarray, t: np.ndarray,
     # ---- Depth vs time ----
     ax2 = axs[1]
     ax2.plot(t, asv_pos[:, 2], color="C0", label="USV")
-    ax2.plot(t, rov_pos[:, 2], color="C1", label="ROV")
+    ax2.plot(t, rov_pos[:, 2], color="C1", label="UUV")
     ax2.invert_yaxis()
     ax2.set_xlabel("Time [s]")
     ax2.set_ylabel("Depth [m]")
-    ax2.set_title("Ground-truth depth")
+    ax2.set_title(f"Ground-truth depth profiles")
     ax2.grid(True, alpha=0.3)
     ax2.legend(loc="best", fontsize="small")
 
+    fig.suptitle(f"{title_traj} trajectories", fontsize=14)
     fig.tight_layout()
 
     if out_path is not None:
@@ -143,9 +144,9 @@ def _plot_trajectories(asv_pos: np.ndarray, rov_pos: np.ndarray, t: np.ndarray,
 # UPDATED: geometry plots
 # -----------------------------
 def _plot_geometry(t: np.ndarray, bearing: np.ndarray, heading: np.ndarray, slant_range: np.ndarray,
-                   out_path: Path | None):
+                   out_path: Path | None, title_traj: str):
 
-    fig, axs = plt.subplots(3, 1, figsize=(8.0, 7.5), sharex=True)
+    fig, axs = plt.subplots(3, 1, figsize=(7.5, 7.5), sharex=True)
     # bearing = np.unwrap(bearing)
     # heading = np.unwrap(heading)
     # bearing_plot = wrap_and_break(bearing)
@@ -160,7 +161,7 @@ def _plot_geometry(t: np.ndarray, bearing: np.ndarray, heading: np.ndarray, slan
     # ---- Bearing ----
     # axs[0].plot(t, np.degrees(bearing), color="C2")
     axs[0].set_ylabel("Azimuth [deg]")
-    axs[0].set_title("Azimuth angle (USV to ROV)")
+    axs[0].set_title("Azimuth angle (USV to UUV)")
     axs[0].grid(True, alpha=0.3)
     # axs[0].set_ylim(-180, 180)
     # axs[0].set_yticks(["-180°", "-90°", "0°", "90°", "180°"])
@@ -183,9 +184,11 @@ def _plot_geometry(t: np.ndarray, bearing: np.ndarray, heading: np.ndarray, slan
     axs[2].plot(t, slant_range, color="C1")
     axs[2].set_ylabel("Slant range [m]")
     axs[2].set_xlabel("Time [s]")
-    axs[2].set_title("USV-ROV slant range")
+    axs[2].set_title("USV-UUV slant range")
     axs[2].grid(True, alpha=0.3)
 
+
+    fig.suptitle(f"Measurement geometry of {title_traj}", fontsize=14)
     fig.tight_layout()
 
     if out_path is not None:
@@ -234,8 +237,13 @@ def main():
     traj_path = out_dir / "sim_trajectories.svg"
     geom_path = out_dir / "sim_geometry.svg"
 
-    _plot_trajectories(asv_pos, rov_pos, t, traj_path)
-    _plot_geometry(t, bearing, heading, slant_range, geom_path)
+    traj_title_map = {
+        TrajectoryType.FIGURE_8: "Circular/Figure-8",
+        TrajectoryType.LINEAR_TURNS: "Linear/Linear-turns",
+    }
+    title_traj = traj_title_map[traj_type]
+    _plot_trajectories(asv_pos, rov_pos, t, traj_path, title_traj)
+    _plot_geometry(t, bearing, heading, slant_range, geom_path, title_traj)
 
     print(f"[OK] Wrote {traj_path}")
     print(f"[OK] Wrote {geom_path}")
