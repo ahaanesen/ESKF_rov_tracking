@@ -159,8 +159,8 @@ def _plot_geometry(t: np.ndarray, bearing: np.ndarray, heading: np.ndarray, slan
 
     # ---- Bearing ----
     # axs[0].plot(t, np.degrees(bearing), color="C2")
-    axs[0].set_ylabel("Bearing [deg]")
-    axs[0].set_title("Bearing angle (USV to ROV)")
+    axs[0].set_ylabel("Azimuth [deg]")
+    axs[0].set_title("Azimuth angle (USV to ROV)")
     axs[0].grid(True, alpha=0.3)
     # axs[0].set_ylim(-180, 180)
     # axs[0].set_yticks(["-180°", "-90°", "0°", "90°", "180°"])
