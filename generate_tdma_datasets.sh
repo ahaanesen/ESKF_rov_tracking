@@ -4,7 +4,7 @@ set -e
 
 CONTAINER_NAME="eskf_humble"
 IMAGE_NAME="eskf-humble:latest"
-BASE_OUT="/tmp/figure8_delay_no_loss_tdma"
+BASE_OUT="/tmp/linear_turns_delay_no_loss_tdma"
 
 TDMA_SLOT_LENGTHS=(5.0 10.0 20.0 30.0 60.0 120.0)
 
@@ -45,7 +45,7 @@ for SLOT in 5.0 10.0 20.0 30.0 60.0 120.0; do
         --duration 300 \
         --dt 0.01 \
         --seed 42 \
-        --trajectory-type figure_8 \
+        --trajectory-type linear_turns \
         --rov-id 1 \
         --epoch-sec 1700000000 \
         --datum-lat 60.3913 \

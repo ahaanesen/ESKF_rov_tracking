@@ -16,11 +16,11 @@ The resulting folder has the structure expected by the other ROS 2 node, e.g.:
 Usage example:
 
 PYTHONPATH=src:$PYTHONPATH python3 export_fgo_dataset_combined.py \
-    --out /tmp/circular_delay_loss_tdma \
+    --out /tmp/fig8_delay_no_loss \
     --duration 300 \
     --dt 0.01 \
     --seed 42 \
-    --trajectory-type circular \
+    --trajectory-type figure_8 \
     --rov-id 1 \
     --epoch-sec 1700000000 \
     --datum-lat 60.3913 \
@@ -31,14 +31,14 @@ PYTHONPATH=src:$PYTHONPATH python3 export_fgo_dataset_combined.py \
     --depth-rate 0.2 \
     --write-acoustic-rx false \
     --acoustic-delay true \
-    --acoustic-jitter-std 0.1 \
-    --usbl-miss-prob 0.1 \
-    --range-miss-prob 0.1 \
+    --acoustic-jitter-std 0.0 \
+    --usbl-miss-prob 0.0 \
+    --range-miss-prob 0.0 \
     --depth-miss-prob 0.0 \
     --overwrite
 
 Exit docker enviroment to copy from docker/tmp to local folder:
-docker cp eskf_humble:/tmp/circular_delay_loss_tdma ./datasets/circular_delay_loss_tdma
+docker cp eskf_humble:/tmp/fig8_delay_no_loss ./datasets/fig8_delay_no_loss
 """
 
 import argparse
@@ -539,13 +539,13 @@ def parse_args():
     )
     parser.add_argument("--out", type=str, required=True, help="Output dataset folder")
     parser.add_argument("--duration", type=float, default=300.0)
-    parser.add_argument("--dt", type=float, default=0.1, help="Trajectory dt")
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--dt", type=float, default=0.01, help="Trajectory dt")
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--trajectory-type",
         type=str,
         default="circular",
-        choices=("circular", "figure_8", "sinusoidal"),
+        choices=( "figure_8", "linear_turns"),
         help="Trajectory generator mode passed to generate_trajectories().",
     )
 
@@ -559,14 +559,14 @@ def parse_args():
 
     parser.add_argument("--imu-rate", type=float, default=100.0)
     parser.add_argument("--gnss-rate", type=float, default=1.0)
-    parser.add_argument("--usbl-rate", type=float, default=1.0)
-    parser.add_argument("--depth-rate", type=float, default=1.0)
-    parser.add_argument("--range-rate", type=float, default=1.0)
+    parser.add_argument("--usbl-rate", type=float, default=0.2)
+    parser.add_argument("--depth-rate", type=float, default=0.2)
+    parser.add_argument("--range-rate", type=float, default=0.2)
 
     parser.add_argument(
         "--acoustic-delay",
         type=str,
-        default="false",
+        default="true",
         help="If true, USBL/range timestamps are shifted by acoustic time-of-flight in the measurement generator.",
     )
     parser.add_argument("--acoustic-jitter-std", type=float, default=0.0, help="Gaussian timing jitter std [s] for USBL/range reception timestamps.")
@@ -574,13 +574,13 @@ def parse_args():
     parser.add_argument("--range-miss-prob", type=float, default=0.0, help="Probability of dropping each range measurement.")
     parser.add_argument("--depth-miss-prob", type=float, default=0.0, help="Probability of dropping each depth measurement.")
 
-    parser.add_argument("--imu-acc-std", type=float, default=1.167e-3)
-    parser.add_argument("--imu-gyro-std", type=float, default=4.36e-5)
-    parser.add_argument("--gnss-std-ne", type=float, default=0.3)
-    parser.add_argument("--gnss-std-d", type=float, default=0.5)
+    parser.add_argument("--imu-acc-std", type=float, default=4.363e-3 )
+    parser.add_argument("--imu-gyro-std", type=float, default=1.1667e-3)
+    parser.add_argument("--gnss-std-ne", type=float, default=1.5)
+    parser.add_argument("--gnss-std-d", type=float, default=2.0)
     parser.add_argument("--usbl-std-rad", type=float, default=0.01745)
-    parser.add_argument("--range-std-m", type=float, default=0.5)
-    parser.add_argument("--depth-std-m", type=float, default=0.3)
+    parser.add_argument("--range-std-m", type=float, default=0.3)
+    parser.add_argument("--depth-std-m", type=float, default=1.5)
 
     parser.add_argument("--h-acc-mm", type=int, default=300)  # kept for CLI compatibility
     parser.add_argument("--v-acc-mm", type=int, default=500)  # kept for CLI compatibility
