@@ -48,14 +48,11 @@ from tracking_and_navigation.tuning_sim import (
 # SOUND_SPEED    = 1500.0
 
 
-def run_simulations_s1(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, SOUND_SPEED, TDMA_FREQ, SAVE_DIR, ESKF_SIM, INIT_FROM_GT=False, INITIAL_RANGE_SCALE=10.0):
+def run_simulations_s1(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, SOUND_SPEED, TDMA_FREQ, SAVE_DIR, ESKF_SIM, INIT_FROM_GT=False, INITIAL_RANGE_GUESS=10.0):
 
     imu_sim = ESKF_SIM.modelImuAsv
-    _cv_sim = ESKF_SIM.modelCvRov
     gnss_sim = ESKF_SIM.sensorGnssAsv
     usbl_sim = ESKF_SIM.sensorUsbl
-    range_sim = ESKF_SIM.sensorRange
-    depth_sim = ESKF_SIM.sensorDepth
 
     # 1) Ground truth
     asv_gt_tseq, rov_gt_tseq, _ = generate_trajectories(
@@ -87,20 +84,7 @@ def run_simulations_s1(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, S
         miss_prob=MISS_PROB,
         sound_speed=SOUND_SPEED,
     )
-    z_range_tseq = gen.generate_range(
-        std_m=range_sim.range_std,
-        lever_arm=range_sim.lever_arm,
-        rate_hz=TDMA_FREQ,
-        acoustic_delay=ACOUSTIC_DELAY,
-        jitter_std=JITTER_STD,
-        miss_prob=MISS_PROB,
-        sound_speed=SOUND_SPEED,
-    )
-    z_depth_tseq = gen.generate_depth(
-        std_m=depth_sim.depth_std,
-        rate_hz=TDMA_FREQ,
-        miss_prob=0.0,
-    )
+
 
     if INIT_FROM_GT:
         x_init = _init_asv_from_gt(x_init_sim, asv_gt_tseq)
@@ -111,9 +95,9 @@ def run_simulations_s1(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, S
             x_init=x_init,
             x_asv=x_init.nom.asv,
             z_usbl_tseq=z_usbl_tseq,
-            z_range_tseq=z_range_tseq,
-            z_depth_tseq=z_depth_tseq,
-            range_guess=INITIAL_RANGE_SCALE,
+            z_range_tseq=None,
+            z_depth_tseq=None,
+            range_guess=INITIAL_RANGE_GUESS,
         )
 
     traj_name = TRAJECTORY_TYPE.value
@@ -142,13 +126,195 @@ def run_simulations_s1(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, S
         save_dir=f"{SAVE_DIR}/scenario1",
     )
 
-    #plotter_s1.show()
+    plotter_s1.show()
     return plotter_s1
 
+def run_simulation(SCENARIO, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, SOUND_SPEED, TDMA_FREQ, SAVE_DIR, ESKF_SIM, INIT_FROM_GT=False, INITIAL_RANGE_GUESS=10.0):
+    # trajectory_type = TrajectoryType.FIGURE_8
+    # traj_name = TrajectoryType.FIGURE_8.value
+
+    # imu_sim = ESKF_SIM.modelImuAsv
+    # gnss_sim = ESKF_SIM.sensorGnssAsv
+    # usbl_sim = ESKF_SIM.sensorUsbl
+    # range_sim = ESKF_SIM.sensorRange
+    # depth_sim = ESKF_SIM.sensorDepth
+
+    # asv_gt_tseq, rov_gt_tseq, _ = generate_trajectories(
+    #     duration=300,
+    #     dt=0.01,
+    #     trajectory_type=trajectory_type,
+    # )
+
+    # gen = MeasurementGenerator(asv_gt_tseq, rov_gt_tseq)
+
+    # z_imu_tseq = gen.generate_imu_asv(
+    #     accm_std=imu_sim.accm_std,
+    #     gyro_std=imu_sim.gyro_std,
+    #     rate_hz=100.0,
+    # )
+    # z_gnss_tseq = gen.generate_gnss_asv(
+    #     std_ne=gnss_sim.gnss_std_ne,
+    #     std_d=gnss_sim.gnss_std_d,
+    #     lever_arm=gnss_sim.lever_arm,
+    #     rate_hz=1.0,
+    # )
+    # z_usbl_tseq = gen.generate_usbl(
+    #     std_rad=usbl_sim.usbl_std,
+    #     lever_arm=usbl_sim.lever_arm,
+    #     rate_hz=TDMA_FREQ,
+    #     acoustic_delay=ACOUSTIC_DELAY,
+    #     jitter_std=JITTER_STD,
+    #     miss_prob=MISS_PROB,
+    #     sound_speed=SOUND_SPEED,
+    # )
+
+    if SCENARIO == 1:
+        if INIT_FROM_GT:
+            x_init = _init_asv_from_gt(x_init_sim, asv_gt_tseq)
+            x_init = _init_rov_from_gt(x_init, rov_gt_tseq)
+        else:
+            x_init = _init_asv_from_gnss(x_init_sim, z_gnss_tseq)
+            x_init = _init_rov_from_usbl_range_depth(
+                x_init=x_init,
+                x_asv=x_init.nom.asv,
+                z_usbl_tseq=z_usbl_tseq,
+                z_range_tseq=None,
+                z_depth_tseq=None,
+                range_guess=INITIAL_RANGE_GUESS,
+            )
+        
+        print(f"[{traj_name}] Scenario 1: GNSS + Bearing only")
+        upd_s1, pred_s1, zp_s1 = run_eskf_s1(
+            eskf=eskf_sim,
+            x_init=x_init,
+            z_imu_tseq=z_imu_tseq,
+            z_gnss_tseq=z_gnss_tseq,
+            z_usbl_tseq=z_usbl_tseq,
+        )
+
+        plotter_s1 = PlotterESKFJoint(
+            rov_gt=rov_gt_tseq,
+            asv_gt=asv_gt_tseq,
+            x_upds=upd_s1,
+            x_preds=pred_s1,
+            z_gnss_asv=z_gnss_tseq,
+            z_usbl=z_usbl_tseq,
+            z_preds=zp_s1,
+            scenario_name=f"[{traj_name}] Scenario 1: Bearing-only",
+            save_dir=f"{SAVE_DIR}/scenario1",
+        )
+
+        return plotter_s1
+
+    if SCENARIO == 2:
+        z_range_tseq = gen.generate_range(
+            std_m=range_sim.range_std,
+            lever_arm=range_sim.lever_arm,
+            rate_hz=TDMA_FREQ,
+            acoustic_delay=ACOUSTIC_DELAY,
+            jitter_std=JITTER_STD,
+            miss_prob=MISS_PROB,
+            sound_speed=SOUND_SPEED,
+        )
+        if INIT_FROM_GT:
+            x_init = _init_asv_from_gt(x_init_sim, asv_gt_tseq)
+            x_init = _init_rov_from_gt(x_init, rov_gt_tseq)
+        else:
+            x_init = _init_asv_from_gnss(x_init_sim, z_gnss_tseq)
+            x_init = _init_rov_from_usbl_range_depth(
+                x_init=x_init,
+                x_asv=x_init.nom.asv,
+                z_usbl_tseq=z_usbl_tseq,
+                z_range_tseq=z_range_tseq,
+                z_depth_tseq=None,
+                range_guess=INITIAL_RANGE_GUESS,
+            )
+
+        print(f"[{traj_name}] Scenario 2: GNSS + Bearing + Range")
+        upd_s2, pred_s2, zp_s2 = run_eskf_s2(
+            eskf=eskf_sim,
+            x_init=x_init,
+            z_imu_tseq=z_imu_tseq,
+            z_gnss_tseq=z_gnss_tseq,
+            z_usbl_tseq=z_usbl_tseq,
+            z_range_tseq=z_range_tseq,
+        )
+
+        plotter_s2 = PlotterESKFJoint(
+            rov_gt=rov_gt_tseq,
+            asv_gt=asv_gt_tseq,
+            x_upds=upd_s2,
+            x_preds=pred_s2,
+            z_gnss_asv=z_gnss_tseq,
+            z_usbl=z_usbl_tseq,
+            z_range=z_range_tseq,
+            z_preds=zp_s2,
+            scenario_name=f"[{traj_name}] Scenario 2: Bearing + Range",
+            save_dir=f"{SAVE_DIR}/scenario2",
+        )
+        return plotter_s2
 
 
+    if SCENARIO == 3:
+        z_range_tseq = gen.generate_range(
+            std_m=range_sim.range_std,
+            lever_arm=range_sim.lever_arm,
+            rate_hz=TDMA_FREQ,
+            acoustic_delay=ACOUSTIC_DELAY,
+            jitter_std=JITTER_STD,
+            miss_prob=MISS_PROB,
+            sound_speed=SOUND_SPEED,
+        )
+        z_depth_tseq = gen.generate_depth(
+            std_m=depth_sim.depth_std,
+            rate_hz=TDMA_FREQ,
+            miss_prob=MISS_PROB,
+        )
+        if INIT_FROM_GT:
+            x_init = _init_asv_from_gt(x_init_sim, asv_gt_tseq)
+            x_init = _init_rov_from_gt(x_init, rov_gt_tseq)
+        else:
+            x_init = _init_asv_from_gnss(x_init_sim, z_gnss_tseq)
+            x_init = _init_rov_from_usbl_range_depth(
+                x_init=x_init,
+                x_asv=x_init.nom.asv,
+                z_usbl_tseq=z_usbl_tseq,
+                z_range_tseq=z_range_tseq,
+                z_depth_tseq=z_depth_tseq,
+                range_guess=INITIAL_RANGE_GUESS,
+            )
+        print(f"[{traj_name}] Scenario 3: GNSS + Bearing + Range + Depth")
+        upd_s3, pred_s3, zp_s3 = run_eskf_s3(
+            eskf=eskf_sim,
+            x_init=x_init,
+            z_imu_tseq=z_imu_tseq,
+            z_gnss_tseq=z_gnss_tseq,
+            z_usbl_tseq=z_usbl_tseq,
+            z_range_tseq=z_range_tseq,
+            z_depth_tseq=z_depth_tseq,
+        )
+        plotter_s3 = PlotterESKFJoint(
+            rov_gt=rov_gt_tseq,
+            asv_gt=asv_gt_tseq,
+            x_upds=upd_s3,
+            x_preds=pred_s3,
+            z_gnss_asv=z_gnss_tseq,
+            z_usbl=z_usbl_tseq,
+            z_range=z_range_tseq,
+            z_depth=z_depth_tseq,
+            z_preds=zp_s3,
+            scenario_name=f"[{traj_name}] Scenario 3: Bearing + Range + Depth",
+            save_dir=f"{SAVE_DIR}/scenario3",
+        )
+        return plotter_s3
 
-def run_simulations_s1_s2_s3(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, SOUND_SPEED, TDMA_FREQ, SAVE_DIR, ESKF_SIM, INIT_FROM_GT=False):
+    else:
+        raise ValueError(f"Invalid scenario {SCENARIO}")
+
+    
+
+
+def run_simulations_s1_s2_s3(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, SOUND_SPEED, TDMA_FREQ, SAVE_DIR, ESKF_SIM, INIT_FROM_GT=False, INITIAL_RANGE_GUESS=10.0):
 
     imu_sim = ESKF_SIM.modelImuAsv
     _cv_sim = ESKF_SIM.modelCvRov
@@ -199,7 +365,7 @@ def run_simulations_s1_s2_s3(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_P
     z_depth_tseq = gen.generate_depth(
         std_m=depth_sim.depth_std,
         rate_hz=TDMA_FREQ,
-        miss_prob=0.0,
+        miss_prob=MISS_PROB,
     )
 
     if INIT_FROM_GT:
@@ -213,7 +379,7 @@ def run_simulations_s1_s2_s3(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_P
             z_usbl_tseq=z_usbl_tseq,
             z_range_tseq=z_range_tseq,
         z_depth_tseq=z_depth_tseq,
-            range_guess=INITIAL_RANGE_SCALE,
+            range_guess=INITIAL_RANGE_GUESS,
         )
 
     traj_name = TRAJECTORY_TYPE.value
@@ -310,9 +476,9 @@ def run_simulations_s1_s2_s3(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_P
             writer.writeheader()
             writer.writerows(scenario_rows)
 
-    plotter_s1.show()
-    plotter_s2.show()
-    plotter_s3.show()
+    # plotter_s1.show()
+    # plotter_s2.show()
+    # plotter_s3.show()
 
 def _init_asv_from_gt(
     x_init: JointEskfState,
@@ -393,11 +559,11 @@ def _init_rov_from_usbl_range_depth(
     sensor_pos = x_asv.pos + x_asv.ori.as_rotmat() @ usbl_lever_arm  # assuming lever arm is zero for simplicity
 
     # scenario 1, default
-    rov_pos = WithXYZ.from_array([
-                sensor_pos.x + range_guess * np.cos(az) * np.cos(el),
-                sensor_pos.y + range_guess * np.sin(az) * np.cos(el),
-                sensor_pos.z + range_guess * np.sin(el),
-            ])    
+    rov_pos = WithXYZ.from_array(np.array([
+                sensor_pos[0] + range_guess * np.cos(az) * np.cos(el),
+                sensor_pos[1] + range_guess * np.sin(az) * np.cos(el),
+                sensor_pos[2] + range_guess * np.sin(el),
+            ]))    
     rov_vel = x_init.nom.rov.vel  # default to initial guess
 
 
@@ -405,21 +571,21 @@ def _init_rov_from_usbl_range_depth(
         _t, range = z_range_tseq.get_idx(0)
         range = float(range)
         # 2D position from range + bearing, keep z from initial guess
-        rov_pos = WithXYZ.from_array([
-            sensor_pos.x + range * np.cos(az) * np.cos(el),
-            sensor_pos.y + range * np.sin(az) * np.cos(el),
-            sensor_pos.z + range * np.sin(el),  # this will be zero if elevation is zero, otherwise we don't have better info than the initial guess
-        ])
+        rov_pos = WithXYZ.from_array(np.array([
+            sensor_pos[0] + range * np.cos(az) * np.cos(el),
+            sensor_pos[1] + range * np.sin(az) * np.cos(el),
+            sensor_pos[2] + range * np.sin(el),  # this will be zero if elevation is zero, otherwise we don't have better info than the initial guess
+        ]))
     if z_depth_tseq is not None and z_range_tseq is not None:
         _t, range = z_range_tseq.get_idx(0)
         _t, depth = z_depth_tseq.get_idx(0)
         range = float(range)
         depth = float(depth)
-        rov_pos = WithXYZ.from_array([
-            sensor_pos.x + range * np.cos(az) * np.cos(el),
-            sensor_pos.y + range * np.sin(az) * np.cos(el),
+        rov_pos = WithXYZ.from_array(np.array([
+            sensor_pos[0] + range * np.cos(az) * np.cos(el),
+            sensor_pos[1] + range * np.sin(az) * np.cos(el),
             depth,
-        ])
+        ]))
 
     rov_init = RovNominalCV(
         pos=rov_pos,
@@ -439,6 +605,7 @@ def _init_rov_from_gt(
         return x_init
 
     _, rov0 = rov_items[0]
+    # print(f"Initializing ROV from GT with position {rov0.pos} and velocity {rov0.vel}")
     rov_init = RovNominalCV(
         pos=rov0.pos,
         vel=rov0.vel,
@@ -446,8 +613,8 @@ def _init_rov_from_gt(
     rov_err_init_std_sim = np.repeat(
         repeats=3,
         a=[
-            0.0,    # pos
-            0.0,    # vel
+            2.0,    # pos
+            0.2,    # vel
         ],
     )
     asv_err_init_std_sim = np.repeat(

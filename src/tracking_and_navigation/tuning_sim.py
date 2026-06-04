@@ -117,7 +117,7 @@ rov_err_init_std_sim = np.repeat(
     repeats=3,
     a=[
         2.0,    # pos
-        0.1,    # vel
+        0.2,    # vel
     ],
 )
 

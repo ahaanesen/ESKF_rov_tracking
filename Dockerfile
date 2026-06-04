@@ -30,7 +30,8 @@ RUN pip3 install --no-cache-dir \
     scipy \    
     matplotlib \    
     tqdm \
-    scipy
+    scipy \
+    pandas
 
 # Workspace
 WORKDIR /ws

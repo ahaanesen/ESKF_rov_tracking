@@ -2,6 +2,7 @@ import numpy as np
 
 from utils.angles import wrap_to_2pi
 from senfuslib import TimeSequence
+import hashlib
 
 from tracking_and_navigation.states import AsvNominalState, RovNominalCV
 from tracking_and_navigation.measurements import (
@@ -13,6 +14,7 @@ from tracking_and_navigation.measurements import (
 )
 
 
+
 class MeasurementGenerator:
     def __init__(
         self,
@@ -21,6 +23,62 @@ class MeasurementGenerator:
     ):
         self.asv_tseq = asv_tseq
         self.rov_tseq = rov_tseq
+    
+    def _acoustic_packet_received(
+        self,
+        t: float,
+        miss_prob: float,
+        loss_seed: int = 0,
+    ) -> bool:
+        """
+        Deterministic Bernoulli draw.
+
+        Same timestamp + same miss_prob + same seed
+        -> always same result.
+        """
+
+        if miss_prob <= 0.0:
+            return True
+
+        if miss_prob >= 1.0:
+            return False
+
+        key = f"{loss_seed}:{t:.6f}"
+
+        digest = hashlib.sha256(key.encode()).digest()
+
+        u = int.from_bytes(digest[:8], "little") / 2**64
+
+        return u >= miss_prob
+
+
+
+    def generate_acoustic_packet_mask(
+    self,
+    rate_hz: float,
+    miss_prob: float,
+    loss_seed: int = 0,
+    ) -> dict[float, bool]:
+        """
+        Returns:
+            dict[timestamp] = True/False
+            True  -> packet received
+            False -> packet lost
+        """
+
+        t_start = max(self.asv_tseq.t_min, self.rov_tseq.t_min)
+        t_end   = min(self.asv_tseq.t_max, self.rov_tseq.t_max)
+
+        times = np.arange(t_start, t_end, 1.0 / rate_hz)
+
+        return {
+            float(t): self._acoustic_packet_received(
+                t,
+                miss_prob,
+                loss_seed,
+            )
+            for t in times
+        }
 
     # ------------------------------------------------------------------
     # USBL (azimuth + elevation)
@@ -33,7 +91,7 @@ class MeasurementGenerator:
         rate_hz: float = 1.0,
         acoustic_delay: bool = False,
         jitter_std: float = 0.0,
-        miss_prob: float = 0.0,
+        packet_mask = None,
         sound_speed: float = 1500.0,
     ) -> TimeSequence:
         """
@@ -62,8 +120,9 @@ class MeasurementGenerator:
 
         z_list = []
         for t in times:
-            if miss_prob > 0.0 and np.random.random() < miss_prob:
-                continue
+            if packet_mask is not None:
+                if not packet_mask[float(t)]:
+                    continue
 
             asv = self.asv_tseq.at_time(t)
             rov = self.rov_tseq.at_time(t)
@@ -104,7 +163,7 @@ class MeasurementGenerator:
         rate_hz: float = 1.0,
         acoustic_delay: bool = False,
         jitter_std: float = 0.0,
-        miss_prob: float = 0.0,
+        packet_mask = None,
         sound_speed: float = 1500.0,
     ) -> TimeSequence:
         """
@@ -117,8 +176,9 @@ class MeasurementGenerator:
 
         z_list = []
         for t in times:
-            if miss_prob > 0.0 and np.random.random() < miss_prob:
-                continue
+            if packet_mask is not None:
+                if not packet_mask[float(t)]:
+                    continue
 
             asv = self.asv_tseq.at_time(t)
             rov = self.rov_tseq.at_time(t)
@@ -146,7 +206,7 @@ class MeasurementGenerator:
         self,
         std_m: float,
         rate_hz: float = 1.0,
-        miss_prob: float = 0.0,
+        packet_mask = None,
     ) -> TimeSequence:
         """ROV depth measurement (NED Down = rov.pos[2])."""
         t_start = self.rov_tseq.t_min
@@ -155,8 +215,9 @@ class MeasurementGenerator:
 
         z_list = []
         for t in times:
-            if miss_prob > 0.0 and np.random.random() < miss_prob:
-                continue
+            if packet_mask is not None:
+                if not packet_mask[float(t)]:
+                    continue
             rov        = self.rov_tseq.at_time(t)
             depth      = float(rov.pos[2])
             depth_noisy = depth + float(np.random.normal(0.0, std_m))

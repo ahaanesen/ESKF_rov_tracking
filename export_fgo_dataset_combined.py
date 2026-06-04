@@ -16,7 +16,7 @@ The resulting folder has the structure expected by the other ROS 2 node, e.g.:
 Usage example:
 
 PYTHONPATH=src:$PYTHONPATH python3 export_fgo_dataset_combined.py \
-    --out /tmp/fig8_delay_no_loss \
+    --out /tmp/figure8_delay_no_loss_tdma \
     --duration 300 \
     --dt 0.01 \
     --seed 42 \
@@ -37,8 +37,16 @@ PYTHONPATH=src:$PYTHONPATH python3 export_fgo_dataset_combined.py \
     --depth-miss-prob 0.0 \
     --overwrite
 
-Exit docker enviroment to copy from docker/tmp to local folder:
-docker cp eskf_humble:/tmp/fig8_delay_no_loss ./datasets/fig8_delay_no_loss
+For joint packet-loss (all three ROV channels dropped together per slot):
+
+    --usbl-miss-prob 0.3 \
+    --range-miss-prob 0.3 \
+    --depth-miss-prob 0.3 \
+    --joint-rov-packet-loss \
+    --overwrite
+
+Exit docker environment to copy from docker/tmp to local folder:
+docker cp eskf_humble:/tmp/figure8_delay_no_loss_tdma ./datasets/figure8_delay_no_loss_tdma
 """
 
 import argparse
@@ -89,7 +97,6 @@ def lla_to_ecef(lat_rad: float, lon_rad: float, h_m: float) -> np.ndarray:
 
 
 def ecef_to_lla(x: float, y: float, z: float) -> Tuple[float, float, float]:
-    # Iterative solution, stable for this local conversion use case.
     lon = math.atan2(y, x)
     p = math.sqrt(x * x + y * y)
     lat = math.atan2(z, p * (1.0 - WGS84_E2))
@@ -108,19 +115,21 @@ def ned_to_ecef_delta(n: float, e: float, d: float, lat0_rad: float, lon0_rad: f
     s_lon = math.sin(lon0_rad)
     c_lon = math.cos(lon0_rad)
 
-    # NED -> ECEF. This is the corrected transpose direction for exporting GNSS.
     r_ned_to_ecef = np.array(
         [
             [-s_lat * c_lon, -s_lon, -c_lat * c_lon],
-            [-s_lat * s_lon, c_lon, -c_lat * s_lon],
-            [c_lat, 0.0, -s_lat],
+            [-s_lat * s_lon,  c_lon, -c_lat * s_lon],
+            [       c_lat,     0.0,        -s_lat  ],
         ],
         dtype=float,
     )
     return r_ned_to_ecef @ np.array([n, e, d], dtype=float)
 
 
-def ned_to_lla(n: float, e: float, d: float, lat0_deg: float, lon0_deg: float, h0_m: float) -> Tuple[float, float, float]:
+def ned_to_lla(
+    n: float, e: float, d: float,
+    lat0_deg: float, lon0_deg: float, h0_m: float,
+) -> Tuple[float, float, float]:
     lat0 = math.radians(lat0_deg)
     lon0 = math.radians(lon0_deg)
     ecef0 = lla_to_ecef(lat0, lon0, h0_m)
@@ -192,6 +201,83 @@ class Event:
 
 
 # ----------------------------
+# Joint packet-loss mask
+# ----------------------------
+
+
+def apply_joint_rov_loss(
+    usbl_pairs: List[Tuple[float, object]],
+    range_pairs: List[Tuple[float, object]],
+    depth_pairs: List[Tuple[float, object]],
+    miss_prob: float,
+    rng: np.random.Generator,
+) -> Tuple[
+    List[Tuple[float, object]],
+    List[Tuple[float, object]],
+    List[Tuple[float, object]],
+]:
+    """
+    Apply a single Bernoulli(miss_prob) draw per TDMA slot so that USBL,
+    range, and depth measurements are either all present or all absent in
+    each slot.  The three sequences are assumed to be co-timed (same nominal
+    slot times) because they share the same rate and are generated from the
+    same seed.
+
+    The USBL sequence defines the set of slot times.  For each USBL slot the
+    nearest range and depth samples are found and either all three are kept
+    or all three are discarded.  Samples in range/depth that do not correspond
+    to any USBL slot are kept (e.g. if rates differ), though for this study
+    all three rates are equal so this case does not arise.
+
+    Returns the filtered (usbl, range, depth) pair lists.
+    """
+    if miss_prob <= 0.0:
+        return usbl_pairs, range_pairs, depth_pairs
+
+    n_slots = len(usbl_pairs)
+    # One draw per slot — True means the packet is LOST.
+    lost = rng.random(n_slots) < miss_prob
+
+    # Build index sets of range and depth samples that survive.
+    range_times = np.array([t for t, _ in range_pairs], dtype=float)
+    depth_times = np.array([t for t, _ in depth_pairs], dtype=float)
+
+    # Track which range/depth indices have been suppressed.
+    range_suppressed = set()
+    depth_suppressed = set()
+
+    filtered_usbl: List[Tuple[float, object]] = []
+
+    for slot_idx, (t_usbl, z_usbl) in enumerate(usbl_pairs):
+        if lost[slot_idx]:
+            # Find nearest range and depth samples for this slot and suppress them.
+            if len(range_times) > 0:
+                r_idx = int(np.argmin(np.abs(range_times - t_usbl)))
+                range_suppressed.add(r_idx)
+            if len(depth_times) > 0:
+                d_idx = int(np.argmin(np.abs(depth_times - t_usbl)))
+                depth_suppressed.add(d_idx)
+            # Drop the USBL measurement for this slot.
+        else:
+            filtered_usbl.append((t_usbl, z_usbl))
+
+    filtered_range = [
+        (t, z) for i, (t, z) in enumerate(range_pairs) if i not in range_suppressed
+    ]
+    filtered_depth = [
+        (t, z) for i, (t, z) in enumerate(depth_pairs) if i not in depth_suppressed
+    ]
+
+    n_lost = int(lost.sum())
+    print(
+        f"[INFO] Joint packet-loss: {n_lost}/{n_slots} slots dropped "
+        f"(p={miss_prob:.2f}, actual={n_lost/max(n_slots,1):.3f})"
+    )
+
+    return filtered_usbl, filtered_range, filtered_depth
+
+
+# ----------------------------
 # Ground-truth CSV export
 # ----------------------------
 
@@ -205,15 +291,9 @@ def write_ground_truth_csvs(out_dir: str, asv_tseq, rov_tseq, args) -> None:
         w = csv.writer(f)
         w.writerow(
             [
-                "t_sim_sec",
-                "t_ros_sec",
-                "t_ros_ns",
-                "x_n",
-                "y_e",
-                "z_d",
-                "vx_n",
-                "vy_e",
-                "vz_d",
+                "t_sim_sec", "t_ros_sec", "t_ros_ns",
+                "x_n", "y_e", "z_d",
+                "vx_n", "vy_e", "vz_d",
                 "yaw_rad",
             ]
         )
@@ -227,12 +307,8 @@ def write_ground_truth_csvs(out_dir: str, asv_tseq, rov_tseq, args) -> None:
                     float(t),
                     t_ros_sec + t_ros_nsec * 1e-9,
                     t_ns,
-                    float(s.pos[0]),
-                    float(s.pos[1]),
-                    float(s.pos[2]),
-                    float(s.vel[0]),
-                    float(s.vel[1]),
-                    float(s.vel[2]),
+                    float(s.pos[0]), float(s.pos[1]), float(s.pos[2]),
+                    float(s.vel[0]), float(s.vel[1]), float(s.vel[2]),
                     yaw,
                 ]
             )
@@ -241,16 +317,10 @@ def write_ground_truth_csvs(out_dir: str, asv_tseq, rov_tseq, args) -> None:
         w = csv.writer(f)
         w.writerow(
             [
-                "t_sim_sec",
-                "t_ros_sec",
-                "t_ros_ns",
+                "t_sim_sec", "t_ros_sec", "t_ros_ns",
                 "rov_id",
-                "x_n",
-                "y_e",
-                "z_d",
-                "vx_n",
-                "vy_e",
-                "vz_d",
+                "x_n", "y_e", "z_d",
+                "vx_n", "vy_e", "vz_d",
             ]
         )
         for t, s in rov_tseq.items():
@@ -262,15 +332,12 @@ def write_ground_truth_csvs(out_dir: str, asv_tseq, rov_tseq, args) -> None:
                     t_ros_sec + t_ros_nsec * 1e-9,
                     t_ns,
                     int(args.rov_id),
-                    float(s.pos[0]),
-                    float(s.pos[1]),
-                    float(s.pos[2]),
-                    float(s.vel[0]),
-                    float(s.vel[1]),
-                    float(s.vel[2]),
+                    float(s.pos[0]), float(s.pos[1]), float(s.pos[2]),
+                    float(s.vel[0]), float(s.vel[1]), float(s.vel[2]),
                 ]
             )
 
+    joint = str2bool(args.joint_rov_packet_loss) if hasattr(args, "joint_rov_packet_loss") else False
     with open(meta_json, "w") as f:
         json.dump(
             {
@@ -292,6 +359,7 @@ def write_ground_truth_csvs(out_dir: str, asv_tseq, rov_tseq, args) -> None:
                     "usbl_miss_prob": args.usbl_miss_prob,
                     "range_miss_prob": args.range_miss_prob,
                     "depth_miss_prob": args.depth_miss_prob,
+                    "joint_rov_packet_loss": joint,
                     "sound_speed_mps": args.sound_speed,
                 },
                 "timestamp_alignment": {
@@ -299,7 +367,10 @@ def write_ground_truth_csvs(out_dir: str, asv_tseq, rov_tseq, args) -> None:
                     "t_ros_ns_definition": "int((epoch_sec + t_sim_sec) * 1e9)",
                     "stamp_split": "sec=int(t), nsec=int((t-sec)*1e9)",
                 },
-                "notes": "Ground-truth CSVs and MCAP bag were generated in one run from the same trajectories and seed.",
+                "notes": (
+                    "Ground-truth CSVs and MCAP bag were generated in one run "
+                    "from the same trajectories and seed."
+                ),
             },
             f,
             indent=2,
@@ -317,19 +388,20 @@ def write_ground_truth_csvs(out_dir: str, asv_tseq, rov_tseq, args) -> None:
 
 def write_rosbag(out_dir: str, asv_gt, rov_gt, args) -> None:
     write_acoustic = str2bool(args.write_acoustic_rx)
+    joint_loss = str2bool(args.joint_rov_packet_loss) if hasattr(args, "joint_rov_packet_loss") else False
 
     # Dynamic message classes avoid hard dependency at import time.
-    imu_msg = get_message("sensor_msgs/msg/Imu")
-    gnss_msg = get_message("blueboat_interfaces/msg/GNSSNavPvt")
-    usbl_msg = get_message("blueboat_interfaces/msg/USBL")
+    imu_msg     = get_message("sensor_msgs/msg/Imu")
+    gnss_msg    = get_message("blueboat_interfaces/msg/GNSSNavPvt")
+    usbl_msg    = get_message("blueboat_interfaces/msg/USBL")
     acoustic_msg = get_message("blueboat_interfaces/msg/AcousticCommReceive")
 
     mg = MeasurementGenerator(asv_gt, rov_gt)
 
     gnss_lever_arm = np.array([0.3, 0.3, 0.1], dtype=float)
-    lever_arm = np.array([0.0, 0.0, 1.2], dtype=float)  # match env.usbl_offset_z default
+    lever_arm      = np.array([0.0, 0.0, 1.2], dtype=float)
 
-    imu_seq = mg.generate_imu_asv(
+    imu_seq  = mg.generate_imu_asv(
         accm_std=args.imu_acc_std,
         gyro_std=args.imu_gyro_std,
         rate_hz=args.imu_rate,
@@ -341,45 +413,103 @@ def write_rosbag(out_dir: str, asv_gt, rov_gt, args) -> None:
         rate_hz=args.gnss_rate,
     )
     acoustic_delay = str2bool(args.acoustic_delay)
-    usbl_seq = mg.generate_usbl(
-        std_rad=args.usbl_std_rad,
-        lever_arm=lever_arm,
-        rate_hz=args.usbl_rate,
-        acoustic_delay=acoustic_delay,
-        jitter_std=args.acoustic_jitter_std,
-        miss_prob=args.usbl_miss_prob,
-        sound_speed=args.sound_speed,
-    )
-    range_seq = mg.generate_range(
-        std_m=args.range_std_m,
-        lever_arm=lever_arm,
-        rate_hz=args.range_rate,
-        acoustic_delay=acoustic_delay,
-        jitter_std=args.acoustic_jitter_std,
-        miss_prob=args.range_miss_prob,
-        sound_speed=args.sound_speed,
-    )
-    depth_seq = mg.generate_depth(
-        std_m=args.depth_std_m,
-        rate_hz=args.depth_rate,
-        miss_prob=args.depth_miss_prob,
-    )
 
-    imu_pairs = as_pairs(imu_seq)
+    if joint_loss:
+        # Generate all three ROV sequences WITHOUT per-channel loss, then
+        # apply a single shared Bernoulli mask so that all three are either
+        # present or absent in every TDMA slot.  The miss_prob used for the
+        # shared draw comes from usbl_miss_prob; the three values must be
+        # equal when joint loss is active (enforced in parse_args validation).
+        usbl_seq  = mg.generate_usbl(
+            std_rad=args.usbl_std_rad,
+            lever_arm=lever_arm,
+            rate_hz=args.usbl_rate,
+            acoustic_delay=acoustic_delay,
+            jitter_std=args.acoustic_jitter_std,
+            miss_prob=0.0,          # loss applied jointly below
+            sound_speed=args.sound_speed,
+        )
+        range_seq = mg.generate_range(
+            std_m=args.range_std_m,
+            lever_arm=lever_arm,
+            rate_hz=args.range_rate,
+            acoustic_delay=acoustic_delay,
+            jitter_std=args.acoustic_jitter_std,
+            miss_prob=0.0,          # loss applied jointly below
+            sound_speed=args.sound_speed,
+        )
+        depth_seq = mg.generate_depth(
+            std_m=args.depth_std_m,
+            rate_hz=args.depth_rate,
+            miss_prob=0.0,          # loss applied jointly below
+        )
+
+        usbl_pairs  = as_pairs(usbl_seq)
+        range_pairs = as_pairs(range_seq)
+        depth_pairs = as_pairs(depth_seq)
+
+        # Use a separate RNG seeded deterministically from args.seed so that
+        # the loss pattern is reproducible but independent of the measurement
+        # noise draws made inside MeasurementGenerator.
+        loss_rng = np.random.default_rng(args.seed + 100_000)
+        usbl_pairs, range_pairs, depth_pairs = apply_joint_rov_loss(
+            usbl_pairs, range_pairs, depth_pairs,
+            miss_prob=args.usbl_miss_prob,
+            rng=loss_rng,
+        )
+    else:
+        # Original independent per-channel loss behaviour.
+        usbl_seq  = mg.generate_usbl(
+            std_rad=args.usbl_std_rad,
+            lever_arm=lever_arm,
+            rate_hz=args.usbl_rate,
+            acoustic_delay=acoustic_delay,
+            jitter_std=args.acoustic_jitter_std,
+            miss_prob=args.usbl_miss_prob,
+            sound_speed=args.sound_speed,
+        )
+        range_seq = mg.generate_range(
+            std_m=args.range_std_m,
+            lever_arm=lever_arm,
+            rate_hz=args.range_rate,
+            acoustic_delay=acoustic_delay,
+            jitter_std=args.acoustic_jitter_std,
+            miss_prob=args.range_miss_prob,
+            sound_speed=args.sound_speed,
+        )
+        depth_seq = mg.generate_depth(
+            std_m=args.depth_std_m,
+            rate_hz=args.depth_rate,
+            miss_prob=args.depth_miss_prob,
+        )
+
+        usbl_pairs  = as_pairs(usbl_seq)
+        range_pairs = as_pairs(range_seq)
+        depth_pairs = as_pairs(depth_seq)
+
+    imu_pairs  = as_pairs(imu_seq)
     gnss_pairs = as_pairs(gnss_seq)
-    usbl_pairs = as_pairs(usbl_seq)
-    range_pairs = as_pairs(range_seq)
-    depth_pairs = as_pairs(depth_seq)
+
+    if len(usbl_pairs) == 0:
+        raise RuntimeError(
+            "No USBL measurements remain after packet-loss filtering. "
+            "Reduce --usbl-miss-prob or increase --duration."
+        )
+    if len(range_pairs) == 0:
+        raise RuntimeError(
+            "No range measurements remain after packet-loss filtering. "
+            "Reduce --range-miss-prob or increase --duration."
+        )
+    if len(depth_pairs) == 0:
+        raise RuntimeError(
+            "No depth measurements remain after packet-loss filtering. "
+            "Reduce --depth-miss-prob or increase --duration."
+        )
 
     range_times = np.array([t for t, _ in range_pairs], dtype=float)
-    range_vals = [z for _, z in range_pairs]
+    range_vals  = [z for _, z in range_pairs]
     depth_times = np.array([t for t, _ in depth_pairs], dtype=float)
-    depth_vals = [z for _, z in depth_pairs]
-
-    if len(range_pairs) == 0:
-        raise RuntimeError("No range measurements were generated. Reduce --range-miss-prob or increase duration/rate.")
-    if len(depth_pairs) == 0:
-        raise RuntimeError("No depth measurements were generated. Reduce --depth-miss-prob or increase duration/rate.")
+    depth_vals  = [z for _, z in depth_pairs]
 
     def nearest(times: np.ndarray, vals: List, t: float):
         idx = int(np.argmin(np.abs(times - t)))
@@ -394,7 +524,7 @@ def write_rosbag(out_dir: str, asv_gt, rov_gt, args) -> None:
         events.append(Event(float(t), "usbl", z))
     events.sort(key=lambda e: e.t)
 
-    storage_options = rosbag2_py.StorageOptions(uri=out_dir, storage_id="mcap")
+    storage_options   = rosbag2_py.StorageOptions(uri=out_dir, storage_id="mcap")
     converter_options = rosbag2_py.ConverterOptions(
         input_serialization_format="cdr",
         output_serialization_format="cdr",
@@ -433,7 +563,7 @@ def write_rosbag(out_dir: str, asv_gt, rov_gt, args) -> None:
         )
 
     for e in events:
-        stamp = sim_time_to_ros_time(e.t, args.epoch_sec)
+        stamp    = sim_time_to_ros_time(e.t, args.epoch_sec)
         stamp_ns = to_ns(e.t, args.epoch_sec)
 
         if e.kind == "imu":
@@ -462,12 +592,12 @@ def write_rosbag(out_dir: str, asv_gt, rov_gt, args) -> None:
             m.header = Header()
             m.header.stamp = stamp
             m.header.frame_id = "gnss_link"
-            m.lat = lat
-            m.lon = lon
-            m.height = h
+            m.lat      = lat
+            m.lon      = lon
+            m.height   = h
             m.fix_type = 3
             m.gnss_fix_ok = True
-            m.h_acc = args.gnss_std_ne
+            m.h_acc    = args.gnss_std_ne
             if hasattr(m, "v_acc"):
                 m.v_acc = args.gnss_std_d
             writer.write(args.topic_gnss, serialize_message(m), stamp_ns)
@@ -484,13 +614,9 @@ def write_rosbag(out_dir: str, asv_gt, rov_gt, args) -> None:
 
             tof_sec = max(rng_m / args.sound_speed, 0.0)
             if acoustic_delay:
-                # The new MeasurementGenerator can timestamp USBL at reception time.
-                # Recover an approximate transmit time for the message fields.
                 t_recv_sec = float(args.epoch_sec) + float(e.t)
                 t_sent_sec = t_recv_sec - tof_sec
             else:
-                # Keep the previous behaviour: bag/header time is the measurement epoch,
-                # while acoustic modem fields still represent sent/received UTC-like times.
                 t_sent_sec = float(args.epoch_sec) + float(e.t)
                 t_recv_sec = t_sent_sec + tof_sec
             t_sent_us = int(round(t_sent_sec * 1e6))
@@ -500,12 +626,12 @@ def write_rosbag(out_dir: str, asv_gt, rov_gt, args) -> None:
             m.header = Header()
             m.header.stamp = stamp
             m.header.frame_id = "usbl_link"
-            m.rov_id = int(args.rov_id)
-            m.azimuth = math.degrees(az_rad)
+            m.rov_id    = int(args.rov_id)
+            m.azimuth   = math.degrees(az_rad)
             m.elevation = math.degrees(el_rad)
-            m.t_sent = t_sent_us
+            m.t_sent    = t_sent_us
             m.t_received = t_recv_us
-            m.position = Vector3(x=0.0, y=0.0, z=dep_m)
+            m.position  = Vector3(x=0.0, y=0.0, z=dep_m)
             writer.write(args.topic_usbl, serialize_message(m), stamp_ns)
 
             if write_acoustic:
@@ -513,10 +639,10 @@ def write_rosbag(out_dir: str, asv_gt, rov_gt, args) -> None:
                 a.header = Header()
                 a.header.stamp = stamp
                 a.header.frame_id = "acoustic_link"
-                a.node_id = int(args.rov_id)
-                a.t_sent = t_sent_us
+                a.node_id    = int(args.rov_id)
+                a.t_sent     = t_sent_us
                 a.t_received = t_recv_us
-                a.position = Point(x=0.0, y=0.0, z=dep_m)
+                a.position   = Point(x=0.0, y=0.0, z=dep_m)
                 writer.write(args.topic_acoustic, serialize_message(a), stamp_ns)
 
     print(f"[OK] Wrote MCAP bag to: {out_dir}")
@@ -549,51 +675,100 @@ def parse_args():
         help="Trajectory generator mode passed to generate_trajectories().",
     )
 
-    parser.add_argument("--datum-lat", type=float, default=60.3913)
-    parser.add_argument("--datum-lon", type=float, default=5.3221)
-    parser.add_argument("--datum-h", type=float, default=0.0)
+    parser.add_argument("--datum-lat",  type=float, default=60.3913)
+    parser.add_argument("--datum-lon",  type=float, default=5.3221)
+    parser.add_argument("--datum-h",    type=float, default=0.0)
 
     parser.add_argument("--sound-speed", type=float, default=1500.0)
-    parser.add_argument("--rov-id", type=int, default=1)
-    parser.add_argument("--epoch-sec", type=int, default=1700000000)
+    parser.add_argument("--rov-id",      type=int,   default=1)
+    parser.add_argument("--epoch-sec",   type=int,   default=1700000000)
 
-    parser.add_argument("--imu-rate", type=float, default=100.0)
-    parser.add_argument("--gnss-rate", type=float, default=1.0)
-    parser.add_argument("--usbl-rate", type=float, default=0.2)
-    parser.add_argument("--depth-rate", type=float, default=0.2)
-    parser.add_argument("--range-rate", type=float, default=0.2)
+    parser.add_argument("--imu-rate",   type=float, default=100.0)
+    parser.add_argument("--gnss-rate",  type=float, default=1.0)
+    parser.add_argument("--usbl-rate",  type=float, default=1.0)
+    parser.add_argument("--depth-rate", type=float, default=1.0)
+    parser.add_argument("--range-rate", type=float, default=1.0)
 
     parser.add_argument(
         "--acoustic-delay",
         type=str,
-        default="true",
-        help="If true, USBL/range timestamps are shifted by acoustic time-of-flight in the measurement generator.",
+        default="false",
+        help="If true, USBL/range timestamps are shifted by acoustic time-of-flight.",
     )
-    parser.add_argument("--acoustic-jitter-std", type=float, default=0.0, help="Gaussian timing jitter std [s] for USBL/range reception timestamps.")
-    parser.add_argument("--usbl-miss-prob", type=float, default=0.0, help="Probability of dropping each USBL measurement.")
-    parser.add_argument("--range-miss-prob", type=float, default=0.0, help="Probability of dropping each range measurement.")
-    parser.add_argument("--depth-miss-prob", type=float, default=0.0, help="Probability of dropping each depth measurement.")
+    parser.add_argument(
+        "--acoustic-jitter-std",
+        type=float,
+        default=0.0,
+        help="Gaussian timing jitter std [s] for USBL/range reception timestamps.",
+    )
+    parser.add_argument(
+        "--usbl-miss-prob",
+        type=float,
+        default=0.0,
+        help="Probability of dropping each USBL measurement (independent, or joint slot loss).",
+    )
+    parser.add_argument(
+        "--range-miss-prob",
+        type=float,
+        default=0.0,
+        help="Probability of dropping each range measurement (independent, or joint slot loss).",
+    )
+    parser.add_argument(
+        "--depth-miss-prob",
+        type=float,
+        default=0.0,
+        help="Probability of dropping each depth measurement (independent, or joint slot loss).",
+    )
+    parser.add_argument(
+        "--joint-rov-packet-loss",
+        action="store_true",
+        default=False,
+        help=(
+            "If set, a single Bernoulli draw per TDMA slot decides whether "
+            "all three ROV measurements (USBL, range, depth) are delivered or "
+            "all dropped together, modelling a single acoustic packet per slot. "
+            "The loss probability is taken from --usbl-miss-prob; all three "
+            "--*-miss-prob values must be equal when this flag is used."
+        ),
+    )
 
-    parser.add_argument("--imu-acc-std", type=float, default=4.363e-3 )
-    parser.add_argument("--imu-gyro-std", type=float, default=1.1667e-3)
-    parser.add_argument("--gnss-std-ne", type=float, default=1.5)
-    parser.add_argument("--gnss-std-d", type=float, default=2.0)
+    parser.add_argument("--imu-acc-std",  type=float, default=1.167e-3)
+    parser.add_argument("--imu-gyro-std", type=float, default=4.36e-5)
+    parser.add_argument("--gnss-std-ne",  type=float, default=0.3)
+    parser.add_argument("--gnss-std-d",   type=float, default=0.5)
     parser.add_argument("--usbl-std-rad", type=float, default=0.01745)
-    parser.add_argument("--range-std-m", type=float, default=0.3)
-    parser.add_argument("--depth-std-m", type=float, default=1.5)
+    parser.add_argument("--range-std-m",  type=float, default=0.5)
+    parser.add_argument("--depth-std-m",  type=float, default=0.3)
 
     parser.add_argument("--h-acc-mm", type=int, default=300)  # kept for CLI compatibility
     parser.add_argument("--v-acc-mm", type=int, default=500)  # kept for CLI compatibility
 
     parser.add_argument("--write-acoustic-rx", type=str, default="false")
-    parser.add_argument("--overwrite", action="store_true", help="Delete --out first if it already exists")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Delete --out first if it already exists.",
+    )
 
-    parser.add_argument("--topic-imu", type=str, default="microampere/imu/data")
-    parser.add_argument("--topic-gnss", type=str, default="microampere/gnss/nav_pvt")
-    parser.add_argument("--topic-usbl", type=str, default="microampere/sensors/usbl")
+    parser.add_argument("--topic-imu",      type=str, default="microampere/imu/data")
+    parser.add_argument("--topic-gnss",     type=str, default="microampere/gnss/nav_pvt")
+    parser.add_argument("--topic-usbl",     type=str, default="microampere/sensors/usbl")
     parser.add_argument("--topic-acoustic", type=str, default="microampere/acoustic/receive")
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # Validate joint-loss consistency: all three miss probs must agree.
+    if args.joint_rov_packet_loss:
+        probs = {args.usbl_miss_prob, args.range_miss_prob, args.depth_miss_prob}
+        if len(probs) != 1:
+            parser.error(
+                "--joint-rov-packet-loss requires --usbl-miss-prob, "
+                "--range-miss-prob, and --depth-miss-prob to be equal. "
+                f"Got: usbl={args.usbl_miss_prob}, range={args.range_miss_prob}, "
+                f"depth={args.depth_miss_prob}."
+            )
+
+    return args
 
 
 def main():
@@ -623,7 +798,7 @@ def main():
     # rosbag2 creates args.out and writes metadata.yaml + *.mcap into it.
     write_rosbag(args.out, asv_gt, rov_gt, args)
 
-    # Add plotting ground-truth files into the exact same dataset folder.
+    # Add ground-truth CSV files into the same dataset folder.
     write_ground_truth_csvs(args.out, asv_gt, rov_gt, args)
 
     print("[OK] Combined dataset folder contents should now include:")
