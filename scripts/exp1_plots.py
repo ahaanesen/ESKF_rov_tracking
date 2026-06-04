@@ -1,9 +1,11 @@
 import argparse
 import csv
+from enum import Enum
 import io
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+
 
 plt.rcParams.update(
     {
@@ -13,40 +15,64 @@ plt.rcParams.update(
     }
 )
 
+class TrajectoryType(str, Enum):
+    """
+    Trajectory mode selector for both USV and ROV.
+
+    CIRCULAR   - ASV circles a fixed centre; ROV follows piecewise-linear
+                 waypoints.  The CV model matches ROV truth exactly, making
+                 this the most favourable scenario for the ESKF.
+
+    FIGURE_8   - ASV traces a Lissajous figure-8 (2:1 frequency ratio),
+                 producing frequent heading reversals that improve bearing-
+                 only observability.  ROV makes a slow circular sweep with
+                 sinusoidal depth — smooth but non-CV, introducing mild model
+                 mismatch.
+    LINEAR_TURNS - ASV moves linearly between waypoints, with smooth heading
+                 changes at each waypoint.  ROV makes a slow linear dive.
+                 This is the least favourable scenario for bearing-only, but
+                 is simple and smooth, and still has some heading variation.
+    """
+    CIRCULAR   = "circular"
+    FIGURE_8   = "figure_8"
+    LINEAR_TURNS = "linear_turns"
+
+TRAJECTORY_TYPE = TrajectoryType.LINEAR_TURNS
+    
 exp1_eskf_results = """
-    estimator,experiment,scenario,vehicle,sigma_a,tdma_interval,init_range_scale,run_idx,rmse,ate,final_error,mean_nees,converged
-    ESKF,exp1,bearing-only,ROV,0.005,,,0,4.108090071555802,4.108090071555802,3.141608595557201,14.240611086709698,True
-    ESKF,exp1,bearing-only,ASV,0.005,,,0,1.479639433518815,1.479639433518815,1.2585531873364377,3.9350673963535057,True
-    ESKF,exp1,bearing-only,ROV,0.01,,,0,2.639284718218277,2.639284718218277,2.6407154020197683,4.26418376595139,True
-    ESKF,exp1,bearing-only,ASV,0.01,,,0,1.1923260882445827,1.1923260882445827,1.510040513020021,2.4216402914050716,True
-    ESKF,exp1,bearing-only,ROV,0.02,,,0,2.5474647203866305,2.5474647203866305,1.8460604207830082,2.745736094424955,True
-    ESKF,exp1,bearing-only,ASV,0.02,,,0,1.4203950680294228,1.4203950680294228,1.0680482632977084,3.4140304104183037,True
-    ESKF,exp1,bearing-only,ROV,0.05,,,0,5.675567160498391,5.675567160498391,6.9782581083451145,2.6351698197017326,True
-    ESKF,exp1,bearing-only,ASV,0.05,,,0,1.2436129015348765,1.2436129015348765,1.0822002750725754,2.272128537715435,True
-    ESKF,exp1,bearing-only,ROV,0.1,,,0,16.386262311327467,16.386262311327467,22.02860260863204,10.420443898311984,False
-    ESKF,exp1,bearing-only,ASV,0.1,,,0,1.154504882724549,1.154504882724549,0.84793295769563,1.8749918022391998,True
-    ESKF,exp1,bearing-only,ROV,0.5,,,0,621.1800234378202,621.1800234378202,1305.0927421843762,374.4104293809302,False
-    ESKF,exp1,bearing-only,ASV,0.5,,,0,1.318203157273905,1.318203157273905,0.46727963575783527,2.449813057636473,True
-    ESKF,exp1,bearing-only,ROV,1.0,,,0,411.5578521760685,411.5578521760685,741.3015845076578,99.04007973488008,False
-    ESKF,exp1,bearing-only,ASV,1.0,,,0,1.268556224719796,1.268556224719796,1.165658121446783,2.328837980924512,True
+estimator,experiment,scenario,vehicle,sigma_a,tdma_interval,init_range_scale,packet_loss_prob,run_idx,rmse,ate,final_error,mean_nees,converged
+ESKF,exp1,bearing-only,ROV,0.005,,,,0,3.9499063779355295,3.9499063779355295,2.1821256942821243,1.7640490052468927,True
+ESKF,exp1,bearing-only,ASV,0.005,,,,0,1.273874340793982,1.273874340793982,1.239217223348542,2.330681330127901,True
+ESKF,exp1,bearing-only,ROV,0.01,,,,0,3.223106168722343,3.223106168722343,1.683885406137093,1.3143779110986598,True
+ESKF,exp1,bearing-only,ASV,0.01,,,,0,1.3979450006094776,1.3979450006094776,0.9504812138579132,2.7710695732275235,True
+ESKF,exp1,bearing-only,ROV,0.02,,,,0,9.193567196153184,9.193567196153184,15.28360062328699,1.6535339367535375,False
+ESKF,exp1,bearing-only,ASV,0.02,,,,0,1.3449974234079605,1.3449974234079605,2.404942056094326,2.4779787574765075,True
+ESKF,exp1,bearing-only,ROV,0.05,,,,0,21.116167498295614,21.116167498295614,45.46711560985405,1.5990747463762078,False
+ESKF,exp1,bearing-only,ASV,0.05,,,,0,1.3368735869405814,1.3368735869405814,0.6219840673766317,2.635653308776685,True
+ESKF,exp1,bearing-only,ROV,0.1,,,,0,47.29803918181772,47.29803918181772,131.09903928609918,2.1629577640679494,False
+ESKF,exp1,bearing-only,ASV,0.1,,,,0,1.3726462841180067,1.3726462841180067,0.9172763999045199,2.6213799180266366,True
+ESKF,exp1,bearing-only,ROV,0.5,,,,0,895.4587503802459,895.4587503802459,1926.2936693966974,20.380234274248743,False
+ESKF,exp1,bearing-only,ASV,0.5,,,,0,1.418151799174189,1.418151799174189,1.6444556257550798,2.812477793890941,True
+ESKF,exp1,bearing-only,ROV,1.0,,,,0,1689.3033787105123,1689.3033787105123,3616.3344616393742,22.878195031810517,False
+ESKF,exp1,bearing-only,ASV,1.0,,,,0,1.4517658011917463,1.4517658011917463,1.9418500058747457,3.1249811160203653,True
 """
 
 exp1_fgo_results = """ 
 estimator,experiment,scenario,platform,sigma_a,tdma_interval,init_range_scale,rmse,ate,final_error,mean_nees,converged
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.005,5.0,GT init,3.1334222453126337,3.1334222453126337,2.313379226905214,5.309872444576585,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.005,5.0,GT init,0.5289545241407887,0.5289545241407887,0.2798738024412492,3.0020598588709557,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.01,5.0,GT init,2.3647831436261533,2.3647831436261533,1.4176419941207874,4.023750098382871,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.01,5.0,GT init,0.4637536635954723,0.4637536635954723,0.3999052779475783,3.012266967669119,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.02,5.0,GT init,2.088067313147829,2.088067313147829,1.1910839953426011,3.503786286259959,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.02,5.0,GT init,0.437416364970001,0.437416364970001,0.3794120026576633,3.0149881474328835,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.05,5.0,GT init,2.3042656367847276,2.3042656367847276,0.5294015532268908,3.0211118260206726,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.05,5.0,GT init,0.4159304582006954,0.4159304582006954,0.2521754807135593,3.0117731777994345,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.1,5.0,GT init,7.771598904192512,7.771598904192512,4.900738274754367,3.7417468948373287,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.1,5.0,GT init,0.4048454659036315,0.4048454659036315,0.1826426199646599,3.011989453509631,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.5,5.0,GT init,16.495441269972556,16.495441269972556,38.01498714083401,4.322090094544777,False
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.5,5.0,GT init,0.3923804153542282,0.3923804153542282,0.1553183010319277,3.017793031199126,True
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,1.0,5.0,GT init,18.57576920062749,18.57576920062749,39.64167512834981,4.15924383977008,False
-FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,1.0,5.0,GT init,0.4010090577996043,0.4010090577996043,0.1607518963556575,3.0115394954393,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.005,5.0,GT init,7.688851813839472,7.688851813839472,3.116441844686936,5.200910223244082,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.005,5.0,GT init,11.810706147682364,11.810706147682364,1.4371889232780273,3.1013623435644777,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.01,5.0,GT init,8.652271568991777,8.652271568991777,3.760665279064407,5.14830056172258,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.01,5.0,GT init,1.7705836783640858,1.7705836783640858,1.588448087991858,3.0982607763321175,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.02,5.0,GT init,8.036619275383616,8.036619275383616,3.55571034960276,4.556133453534396,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.02,5.0,GT init,1.7701848175115966,1.7701848175115966,1.644147465777914,3.095903010053548,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.05,5.0,GT init,104.8188137129204,104.8188137129204,226.5639454508721,3.800394897812817,False
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.05,5.0,GT init,1.7852472969785582,1.7852472969785582,1.474601634768175,3.102676208640824,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.1,5.0,GT init,104.15775581699448,104.15775581699448,210.82527679960316,4.651716494606948,False
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.1,5.0,GT init,1.7797589258350277,1.7797589258350277,1.6923307336306264,3.1298988056260244,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,0.5,5.0,GT init,464.29772279996854,464.29772279996854,174.1501468258165,3.449530287484732,False
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,0.5,5.0,GT init,1.7093102261076405,1.7093102261076405,3.049075993018863,3.1329123291200105,True
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ROV,1.0,5.0,GT init,498.8268069985549,498.8268069985549,252.06496401643133,3.5453874035570263,False
+FGO,exp1_noise_sweep,FGO - Scenario 1: Bearing-only,ASV,1.0,5.0,GT init,1.750792086983874,1.750792086983874,1.5250726388324054,3.0718470098740185,True
 """
 
 SCENARIO_LABELS = ["B", "B+R", "B+R+D"]
@@ -126,11 +152,13 @@ def _plot_metric(ax, rows: list[dict], vehicle: str, metric: str, ylabel: str) -
 
 
 def main() -> None:
+    gt_traj = "Circular/Figure 8" if TRAJECTORY_TYPE == TrajectoryType.FIGURE_8 else "Linear/Linear-turns"
+    
     parser = argparse.ArgumentParser(description="Plot exp1 ATE and NEES results.")
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("plots/exp1_cv"),
+        default=Path(f"plots/{TRAJECTORY_TYPE.value}/exp1_cv"),
         help="Directory to save figures (optional).",
     )
     parser.add_argument(
@@ -148,17 +176,17 @@ def main() -> None:
     _plot_metric(axes_ate[0], rows, "ROV", "ate", "ATE (RMSE)")
     _plot_metric(axes_ate[1], rows, "ASV", "ate", "ATE (RMSE)")
     axes_ate[1].legend(loc="upper right", fontsize=8)
-    fig_ate.suptitle(r"CV tuning: ATE (RMSE) vs $\sigma_a$")
+    fig_ate.suptitle(rf"{gt_traj}: ATE (RMSE) vs $\sigma_a$", fontsize=14)
     fig_ate.tight_layout(rect=[0, 0, 1, 0.94])
 
     fig_nees, axes_nees = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
     lower, upper = _chi2_95_interval_3dof()
     for ax in axes_nees:
-        ax.axhspan(lower, upper, color="grey", alpha=0.15, label=r"$95\%\,\chi^2_{3}$")
+        ax.axhspan(lower, upper, color="grey", alpha=0.15, label=r"$\,\chi^2_{0.95,3}$")
     _plot_metric(axes_nees[0], rows, "ROV", "mean_nees", "NEES")
     _plot_metric(axes_nees[1], rows, "ASV", "mean_nees", "NEES")
     axes_nees[1].legend(loc="upper right", fontsize=8)
-    fig_nees.suptitle(r"CV tuning: NEES vs $\sigma_a$")
+    fig_nees.suptitle(rf"{gt_traj}: NEES vs $\sigma_a$", fontsize=14)
     fig_nees.tight_layout(rect=[0, 0, 1, 0.94])
 
     if args.output_dir is not None:

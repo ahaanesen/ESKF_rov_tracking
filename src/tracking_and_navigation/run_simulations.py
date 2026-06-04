@@ -268,7 +268,7 @@ def run_simulation(SCENARIO, ACOUSTIC_DELAY, JITTER_STD, MISS_PROB, SOUND_SPEED,
         z_depth_tseq = gen.generate_depth(
             std_m=depth_sim.depth_std,
             rate_hz=TDMA_FREQ,
-            miss_prob=0.0,
+            miss_prob=MISS_PROB,
         )
         if INIT_FROM_GT:
             x_init = _init_asv_from_gt(x_init_sim, asv_gt_tseq)
@@ -365,7 +365,7 @@ def run_simulations_s1_s2_s3(TRAJECTORY_TYPE, ACOUSTIC_DELAY, JITTER_STD, MISS_P
     z_depth_tseq = gen.generate_depth(
         std_m=depth_sim.depth_std,
         rate_hz=TDMA_FREQ,
-        miss_prob=0.0,
+        miss_prob=MISS_PROB,
     )
 
     if INIT_FROM_GT:
@@ -605,7 +605,7 @@ def _init_rov_from_gt(
         return x_init
 
     _, rov0 = rov_items[0]
-    print(f"Initializing ROV from GT with position {rov0.pos} and velocity {rov0.vel}")
+    # print(f"Initializing ROV from GT with position {rov0.pos} and velocity {rov0.vel}")
     rov_init = RovNominalCV(
         pos=rov0.pos,
         vel=rov0.vel,

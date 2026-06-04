@@ -3,6 +3,7 @@ from enum import Enum
 
 from quaternion import RotationQuaterion
 from senfuslib.timesequence import TimeSequence
+from scipy.interpolate import CubicSpline
 
 from tracking_and_navigation.states import AsvNominalState, RovNominalCV
 from tracking_and_navigation.measurements import ImuMeasurement
@@ -21,16 +22,14 @@ class TrajectoryType(str, Enum):
                  only observability.  ROV makes a slow circular sweep with
                  sinusoidal depth — smooth but non-CV, introducing mild model
                  mismatch.
-
-    SINUSOIDAL - ASV follows a sinusoidal S-curve (maximum heading variation,
-                 best bearing geometry).  ROV makes a maneuvering 3-D path
-                 with abrupt speed changes (strong CV violation), exposing
-                 the scenario where FGO's selective re-linearisation and
-                 delayed-measurement handling give the most benefit.
+    LINEAR_TURNS - ASV moves linearly between waypoints, with smooth heading
+                 changes at each waypoint.  ROV makes a slow linear dive.
+                 This is the least favourable scenario for bearing-only, but
+                 is simple and smooth, and still has some heading variation.
     """
     CIRCULAR   = "circular"
     FIGURE_8   = "figure_8"
-    SINUSOIDAL = "sinusoidal"
+    LINEAR_TURNS = "linear_turns"
 
 
 def _ned_yaw_from_velocity(v_ned: np.ndarray, fallback_yaw: float = 0.0) -> float:
@@ -101,6 +100,271 @@ def _imu_from_asv_states(asv_states: list, t: np.ndarray, g: np.ndarray) -> list
         imu_meas.append((float(ti), ImuMeasurement(acc=f_b, avel=omega_b)))
     return imu_meas
 
+
+# ----------------------------------------------------------------------------
+# LINEAR + TURNS  (not the best bearing geometry, but simple and smooth)
+# ----------------------------------------------------------------------------
+# def _generate_linear_turns(t: np.ndarray, g: np.ndarray):
+#     """
+#     ASV: piecewise linear path with *smooth heading transitions*
+#     ROV: smooth linear dive
+#     """
+#     waypoints = [
+#         (np.array([ -60,  -30.0,  0.0]),   0.0),
+#         (np.array([-30.0,  -30.0, .0]),  60.0),
+#         (np.array([-30.0,  0.0, 0.0]), 120.0),
+#         (np.array([-30.0, 40.0, 0.0]), 180.0),
+#         (np.array([10.0, 40.0, 0.0]), 240.0),
+#         (np.array([10.0,  -10.0,  0.0]), 300.0),
+#     ]
+
+#     # -------- Build full ASV trajectory (position + velocity) --------
+#     asv_pos = []
+#     asv_vel = []
+
+#     for i in range(len(waypoints) - 1):
+#         p0, t0 = waypoints[i]
+#         p1, t1 = waypoints[i + 1]
+
+#         seg_t = t[(t >= t0) & (t < t1)]
+#         vel = (p1 - p0) / (t1 - t0)
+
+#         for ti in seg_t:
+#             alpha = (ti - t0) / (t1 - t0)
+#             pos = p0 + alpha * (p1 - p0)
+
+#             asv_pos.append(pos)
+#             asv_vel.append(vel)
+
+#     asv_pos = np.array(asv_pos)
+#     asv_vel = np.array(asv_vel)
+#     # Ensure same length as t
+#     if len(asv_pos) < len(t):
+#         asv_pos = np.vstack([asv_pos, asv_pos[-1]])
+#         asv_vel = np.vstack([asv_vel, asv_vel[-1]])
+
+#     # -------- Smooth yaw from velocity --------
+#     yaw = np.zeros(len(asv_vel))
+
+#     for i in range(len(asv_vel)):
+#         yaw[i] = _ned_yaw_from_velocity(asv_vel[i], yaw[i-1] if i > 0 else 0.0)
+
+#     # unwrap angles to avoid jumps
+#     yaw = np.unwrap(yaw)
+
+#     # -------- Build ASV states --------
+#     asv_states = [
+#         (float(t[i]), AsvNominalState(
+#             pos=asv_pos[i],
+#             vel=asv_vel[i],
+#             ori=RotationQuaterion.from_euler([0.0, 0.0, float(yaw[i])]),
+#             accm_bias=np.zeros(3),
+#             gyro_bias=np.zeros(3),
+#         ))
+#         for i in range(len(t))
+#     ]
+
+#     # -------- ROV: smooth linear dive --------
+#     rov_start = np.array([10.0, -10.0, 8.0])
+#     rov_end   = np.array([100.0, -10.0, 18.0])
+
+#     rov_pos = rov_start + (rov_end - rov_start) * (t / t[-1])[:, None]
+
+#     rov_vel = np.zeros_like(rov_pos)
+#     dt = t[1] - t[0]
+#     rov_vel[1:-1] = (rov_pos[2:] - rov_pos[:-2]) / (2.0 * dt)
+#     rov_vel[0] = rov_vel[1]
+#     rov_vel[-1] = rov_vel[-2]
+
+#     rov_states = [
+#         (float(ti), RovNominalCV(pos=pos, vel=vel))
+#         for ti, pos, vel in zip(t, rov_pos, rov_vel)
+#     ]
+
+#     print(f"Mean asv velocity: {np.mean(np.linalg.norm(asv_vel, axis=1)):.2f} m/s")
+#     print(f"Min-max asv velocity: {np.min(np.linalg.norm(asv_vel, axis=1)):.2f} - {np.max(np.linalg.norm(asv_vel, axis=1)):.2f} m/s")
+#     print(f"Mean rov velocity: {np.mean(np.linalg.norm(rov_vel, axis=1)):.2f} m/s")
+#     print(f"Min-max rov velocity: {np.min(np.linalg.norm(rov_vel, axis=1)):.2f} - {np.max(np.linalg.norm(rov_vel, axis=1)):.2f} m/s")
+
+#     imu_meas = _imu_from_asv_states(asv_states, t, g)
+#     return asv_states, rov_states, imu_meas
+
+# ---------------------------------------------------------------------------
+# LINEAR + CIRCULAR-ARC TURNS  (smooth heading, exact target speeds)
+# ---------------------------------------------------------------------------
+
+# ── private helpers ──────────────────────────────────────────────────────────
+
+def _circular_arc(p_entry: np.ndarray,
+                  dir_in:  np.ndarray,
+                  dir_out: np.ndarray,
+                  radius:  float,
+                  n_pts:   int) -> tuple[np.ndarray, float]:
+    cross_z = dir_in[0] * dir_out[1] - dir_in[1] * dir_out[0]
+    sign    = np.sign(cross_z)          # +1 = left / CCW,  -1 = right / CW
+
+    dangle = (np.arctan2(dir_out[1], dir_out[0])
+              - np.arctan2(dir_in[1],  dir_in[0]))
+    dangle = (dangle + np.pi) % (2 * np.pi) - np.pi   # wrap to (-π, π]
+
+    # Centre of curvature is perpendicular to dir_in, on the inside of the turn
+    perp   = np.array([-dir_in[1], dir_in[0], 0.0])
+    center = p_entry + perp * sign * radius
+
+    dp     = p_entry - center
+    angles = np.linspace(0.0, dangle, n_pts)
+    pts    = np.empty((n_pts, 3))
+    for i, a in enumerate(angles):
+        ca, sa = np.cos(a), np.sin(a)
+        pts[i] = center + np.array([
+            ca * dp[0] - sa * dp[1],
+            sa * dp[0] + ca * dp[1],
+            0.0,
+        ])
+
+    return pts, abs(dangle) * radius
+
+
+def _sample_straight(p_start: np.ndarray,
+                     direction: np.ndarray,
+                     length: float,
+                     spacing: float) -> np.ndarray:
+    """Uniformly-spaced points along a straight segment (open end)."""
+    n = max(2, int(length / spacing))
+    ts = np.linspace(0.0, 1.0, n, endpoint=False)
+    return p_start + np.outer(ts, direction * length)
+
+
+# ── public function ──────────────────────────────────────────────────────────
+
+def _generate_linear_turns(t: np.ndarray, g: np.ndarray):
+    """
+    ASV: piecewise path with *smooth circular-arc turns*.
+    ROV: smooth straight-line dive.
+
+    Parameters
+    ----------
+    t : time array [s], shape (N,), uniform spacing dt = t[1] - t[0]
+    g : gravity vector in NED  [m/s²], e.g. np.array([0, 0, 9.82])
+
+    Returns
+    -------
+    asv_states : list of (t_i, AsvNominalState)
+    rov_states : list of (t_i, RovNominalCV)
+    imu_meas   : list of (t_i, ImuMeasurement)  — from _imu_from_asv_states
+    """
+    ASV_SPEED = 1.5   # m/s  — target mean (and instantaneous) speed
+    ROV_SPEED = 0.5   # m/s
+    TURN_R    = 20.0  # circular-arc radius [m]
+    PT_SPACING = 1.5e-3  # 1.5 mm between table points — fine enough for dt=0.01 s
+
+    dt = float(t[1] - t[0])
+
+    # ------------------------------------------------------------------
+    # 1.  Build the ASV path geometry
+    #     North → (arc R=20m) → East → (arc R=20m) → North
+    # ------------------------------------------------------------------
+    arc_len = TURN_R * (np.pi / 2)               # ≈ 31.42 m per 90° arc
+    seg_len = (ASV_SPEED * t[-1] - 2 * arc_len) / 3  # ≈ 129.1 m per straight leg
+
+    dir_N = np.array([1.0, 0.0, 0.0])
+    dir_E = np.array([0.0, 1.0, 0.0])
+
+    # Key positions
+    p0 = np.zeros(3)                    # start
+    p1 = p0 + dir_N * seg_len           # arc 1 entry
+    n_arc = max(2, int(arc_len / PT_SPACING))
+    arc1_pts, _ = _circular_arc(p1, dir_N, dir_E, TURN_R, n_arc)
+    p2 = arc1_pts[-1]                   # arc 1 exit / leg 2 start
+
+    p3 = p2 + dir_E * seg_len           # arc 2 entry
+    arc2_pts, _ = _circular_arc(p3, dir_E, dir_N, TURN_R, n_arc)
+    p4 = arc2_pts[-1]                   # arc 2 exit / leg 3 start
+
+    p5 = p4 + dir_N * seg_len           # end
+
+    # ------------------------------------------------------------------
+    # 2.  Concatenate into one dense position table
+    # ------------------------------------------------------------------
+    pieces = [
+        _sample_straight(p0, dir_N, seg_len, PT_SPACING),
+        arc1_pts,
+        _sample_straight(p2, dir_E, seg_len, PT_SPACING),
+        arc2_pts,
+        _sample_straight(p4, dir_N, seg_len, PT_SPACING),
+        p5[None, :],   # close the path
+    ]
+    all_pts = np.vstack(pieces)
+
+    ds    = np.linalg.norm(np.diff(all_pts, axis=0), axis=1)
+    arc_s = np.concatenate([[0.0], np.cumsum(ds)])
+    total_arc = arc_s[-1]
+
+    # ------------------------------------------------------------------
+    # 3.  Arc-length reparameterise at constant ASV_SPEED
+    # ------------------------------------------------------------------
+    asv_pos = np.empty((len(t), 3))
+    for i, tv in enumerate(t):
+        s   = min(ASV_SPEED * tv, total_arc - 1e-9)
+        idx = int(np.searchsorted(arc_s, s))
+        asv_pos[i] = all_pts[max(1, min(idx, len(arc_s) - 1))]
+
+    # Velocity via central finite differences, then re-normalise to exact speed
+    asv_vel = np.empty_like(asv_pos)
+    asv_vel[1:-1] = (asv_pos[2:] - asv_pos[:-2]) / (2.0 * dt)
+    asv_vel[0]    = asv_vel[1]
+    asv_vel[-1]   = asv_vel[-2]
+    spd = np.linalg.norm(asv_vel, axis=1, keepdims=True)
+    asv_vel = asv_vel / np.where(spd > 1e-9, spd, 1.0) * ASV_SPEED
+
+    # ------------------------------------------------------------------
+    # 4.  ROV: straight-line constant-velocity dive
+    #     Direction: mostly North-East with a gentle descent
+    # ------------------------------------------------------------------
+    rov_start = np.array([ 200.0, 100.0,  8.0])
+    raw_dir   = np.array([  0.0,   -1.0,  0.1])
+    rov_vel_vec = raw_dir / np.linalg.norm(raw_dir) * ROV_SPEED
+    rov_end   = rov_start + rov_vel_vec * t[-1]
+
+    rov_pos = rov_start + rov_vel_vec * t[:, None]
+    rov_vel = np.tile(rov_vel_vec, (len(t), 1))
+
+    # ------------------------------------------------------------------
+    # 5.  Compute smooth yaw from velocity
+    # ------------------------------------------------------------------
+    yaw = np.zeros(len(asv_vel))
+    for i in range(len(asv_vel)):
+        yaw[i] = _ned_yaw_from_velocity(
+            asv_vel[i],
+            yaw[i - 1] if i > 0 else 0.0
+        )
+
+    yaw_smooth = np.unwrap(yaw)
+
+    # ------------------------------------------------------------------
+    # 6.  Build state sequences
+    # ------------------------------------------------------------------
+
+
+    asv_states = [
+        (float(t[i]), AsvNominalState(
+            pos=asv_pos[i],
+            vel=asv_vel[i],
+            ori=RotationQuaterion.from_euler([0.0, 0.0, float(yaw_smooth[i])]),
+            accm_bias=np.zeros(3),
+            gyro_bias=np.zeros(3),
+        ))
+        for i in range(len(t))
+    ]
+
+    rov_states = [
+        (float(t[i]), RovNominalCV(pos=rov_pos[i], vel=rov_vel[i]))
+        for i in range(len(t))
+    ]
+
+    imu_meas = _imu_from_asv_states(asv_states, t, g)
+
+    return asv_states, rov_states, imu_meas
 
 # ---------------------------------------------------------------------------
 # CIRCULAR  (original — most ideal for ESKF)
@@ -210,58 +474,6 @@ def _generate_figure_8(t: np.ndarray, g: np.ndarray):
     return asv_states, rov_states, imu_meas
 
 
-# ---------------------------------------------------------------------------
-# SINUSOIDAL  (hardest for ESKF; best for FGO)
-# ---------------------------------------------------------------------------
-
-def _generate_sinusoidal(t: np.ndarray, g: np.ndarray):
-    """
-    ASV: straight-line forward with sinusoidal cross-track (S-curve / slalom).
-    Maximum heading rate variation → strongest bearing-only geometry change.
-
-    ROV: piecewise path with abrupt speed changes between waypoints.  The
-    constant-velocity model is violated at every segment transition, which
-    is where the FGO's selective re-linearisation gives the most benefit.
-    The varying inter-waypoint speeds also stress acoustic delay handling.
-    """
-    v_fwd  = 1.5    # m/s forward speed
-    amp_e  = 20.0   # m cross-track amplitude
-    freq_e = 0.025  # rad/s (period ≈ 251 s)
-
-    asv_n = v_fwd * t
-    asv_e = amp_e * np.sin(freq_e * t)
-
-    asv_pos = np.stack([asv_n, asv_e, np.zeros_like(t)], axis=1)
-    asv_vel = np.stack([
-        np.full_like(t, v_fwd),
-        amp_e * freq_e * np.cos(freq_e * t),
-        np.zeros_like(t),
-    ], axis=1)
-    asv_yaw = np.array([_ned_yaw_from_velocity(v) for v in asv_vel])
-
-    asv_states = [
-        (float(t[i]), AsvNominalState(
-            pos=asv_pos[i], vel=asv_vel[i],
-            ori=RotationQuaterion.from_euler([0.0, 0.0, float(asv_yaw[i])]),
-            accm_bias=np.zeros(3), gyro_bias=np.zeros(3),
-        ))
-        for i in range(len(t))
-    ]
-
-    # ROV: waypoints with deliberately varied speeds (strong CV violation at junctions)
-    waypoints = [
-        (np.array([ 5.0, -5.0, 10.0]),   0.0),
-        (np.array([25.0,  0.0, 15.0]),  50.0),   # fast sprint
-        (np.array([27.0,  5.0, 18.0]),  80.0),   # slow crawl
-        (np.array([40.0, 15.0, 22.0]), 130.0),   # medium speed
-        (np.array([50.0, 10.0, 12.0]), 180.0),   # fast descent
-        (np.array([60.0,  5.0,  8.0]), 220.0),   # medium, surfacing
-        (np.array([75.0, 20.0, 20.0]), 300.0),   # slow, dive again
-    ]
-    rov_states = _rov_from_waypoints(t, waypoints)
-    imu_meas   = _imu_from_asv_states(asv_states, t, g)
-    return asv_states, rov_states, imu_meas
-
 
 # ---------------------------------------------------------------------------
 # Public entry-point
@@ -270,7 +482,7 @@ def _generate_sinusoidal(t: np.ndarray, g: np.ndarray):
 _GENERATORS = {
     TrajectoryType.CIRCULAR:   _generate_circular,
     TrajectoryType.FIGURE_8:   _generate_figure_8,
-    TrajectoryType.SINUSOIDAL: _generate_sinusoidal,
+    TrajectoryType.LINEAR_TURNS: _generate_linear_turns,
 }
 
 

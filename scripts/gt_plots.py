@@ -12,6 +12,7 @@ import math
 
 import numpy as np
 from matplotlib import pyplot as plt
+from matplotlib.ticker import FuncFormatter
 
 # plt.rcParams.update(
 #     {
@@ -45,22 +46,49 @@ def _extract_times(tseq) -> np.ndarray:
     return np.asarray(tseq.times, dtype=float)
 
 
-# -----------------------------
-# UPDATED: trajectory plot
-# -----------------------------
+def wrap_and_break(angle_rad):
+    angle_deg = np.degrees(angle_rad)
+
+    # wrap to [-180, 180]
+    angle_deg = (angle_deg + 180) % 360 - 180
+
+    # detect jumps
+    jumps = np.abs(np.diff(angle_deg)) > 180
+
+    angle_deg = angle_deg.copy()
+    angle_deg[1:][jumps] = np.nan  # break the line
+
+    return angle_deg
+
+def wrap_360_break(angle_rad):
+    angle_deg = np.degrees(angle_rad)
+    angle_deg = angle_deg % 360
+
+    jumps = np.abs(np.diff(angle_deg)) > 180
+    angle_deg = angle_deg.copy()
+    angle_deg[1:][jumps] = np.nan  # break lines
+
+    return angle_deg
+
+
+def deg_formatter(x, pos):
+    return f"{int(x)}°"
+
+
+
 def _plot_trajectories(asv_pos: np.ndarray, rov_pos: np.ndarray, t: np.ndarray,
                        out_path: Path | None):
 
-    fig, ax = plt.subplots(figsize=(7.5, 6.0))
+    fig, axs = plt.subplots(2, 1, figsize=(7.5, 9.0),
+                             gridspec_kw={"height_ratios": [2, 1]})
+    ax = axs[0]
 
-    ax.plot(asv_pos[:, 0], asv_pos[:, 1], color="C0", label="USV (figure-8)")
-    ax.plot(rov_pos[:, 0], rov_pos[:, 1], color="C1", label="ROV (circular sweep)")
+    ax.plot(asv_pos[:, 0], asv_pos[:, 1], color="C0", label="USV")
+    ax.plot(rov_pos[:, 0], rov_pos[:, 1], color="C1", label="ROV")
 
-    # Start markers only
     ax.scatter(asv_pos[0, 0], asv_pos[0, 1], color="C0", marker="o", s=60, label="USV start")
     ax.scatter(rov_pos[0, 0], rov_pos[0, 1], color="C1", marker="o", s=60, label="ROV start")
 
-    # Direction arrows along trajectories
     def add_path_arrows(pos, color):
         n = len(pos)
         idxs = np.linspace(0, n - 2, 6, dtype=int)
@@ -75,33 +103,33 @@ def _plot_trajectories(asv_pos: np.ndarray, rov_pos: np.ndarray, t: np.ndarray,
     add_path_arrows(asv_pos, "C0")
     add_path_arrows(rov_pos, "C1")
 
-    # USV -> ROV arrows at key timestamps
     key_times = [5, 10, 30, 60, 120]
-
     for kt in key_times:
         idx = np.argmin(np.abs(t - kt))
-        p_usv = asv_pos[idx]
-        p_rov = rov_pos[idx]
-
         ax.annotate(
             "",
-            xy=p_rov[:2],
-            xytext=p_usv[:2],
-            arrowprops=dict(
-                arrowstyle="->",
-                color="k",
-                linestyle="--",
-                alpha=0.6,
-                lw=1.2,
-            ),
+            xy=rov_pos[idx, :2],
+            xytext=asv_pos[idx, :2],
+            arrowprops=dict(arrowstyle="->", color="k", linestyle="--", alpha=0.6, lw=1.2),
         )
 
     ax.set_xlabel("North [m]")
     ax.set_ylabel("East [m]")
-    ax.set_title("Ground-truth trajectories (top-down NE view)")
+    ax.set_title("Ground-truth top-down view")
     ax.axis("equal")
     ax.grid(True, alpha=0.3)
     ax.legend(loc="best", fontsize="small")
+
+    # ---- Depth vs time ----
+    ax2 = axs[1]
+    ax2.plot(t, asv_pos[:, 2], color="C0", label="USV")
+    ax2.plot(t, rov_pos[:, 2], color="C1", label="ROV")
+    ax2.invert_yaxis()
+    ax2.set_xlabel("Time [s]")
+    ax2.set_ylabel("Depth [m]")
+    ax2.set_title("Ground-truth depth")
+    ax2.grid(True, alpha=0.3)
+    ax2.legend(loc="best", fontsize="small")
 
     fig.tight_layout()
 
@@ -118,20 +146,38 @@ def _plot_geometry(t: np.ndarray, bearing: np.ndarray, heading: np.ndarray, slan
                    out_path: Path | None):
 
     fig, axs = plt.subplots(3, 1, figsize=(8.0, 7.5), sharex=True)
-    bearing = np.unwrap(bearing)
-    heading = np.unwrap(heading)
+    # bearing = np.unwrap(bearing)
+    # heading = np.unwrap(heading)
+    # bearing_plot = wrap_and_break(bearing)
+    # heading_plot = wrap_and_break(heading)
+    bearing_plot = wrap_360_break(bearing)
+    heading_plot = wrap_360_break(heading)
+
+    axs[0].plot(t, bearing_plot, color="C2")
+    axs[1].plot(t, heading_plot, color="C0")
+
 
     # ---- Bearing ----
-    axs[0].plot(t, np.degrees(bearing), color="C2")
+    # axs[0].plot(t, np.degrees(bearing), color="C2")
     axs[0].set_ylabel("Bearing [deg]")
     axs[0].set_title("Bearing angle (USV to ROV)")
     axs[0].grid(True, alpha=0.3)
+    # axs[0].set_ylim(-180, 180)
+    # axs[0].set_yticks(["-180°", "-90°", "0°", "90°", "180°"])
 
     # ---- Heading ----
-    axs[1].plot(t, np.degrees(heading), color="C0")
+    # axs[1].plot(t, np.degrees(heading), color="C0")
     axs[1].set_ylabel("Heading [deg]")
     axs[1].set_title("USV heading")
     axs[1].grid(True, alpha=0.3)
+    # axs[1].set_ylim(-180, 180)
+    # axs[1].set_yticks(["-180°", "-90°", "0°", "90°", "180°"])
+    ticks = [0, 90, 180, 270, 360]
+    for ax in axs[:2]:    
+        # ax.set_ylim(-180, 180)    
+        ax.set_ylim(0, 360)
+        ax.set_yticks(ticks)    
+        ax.yaxis.set_major_formatter(FuncFormatter(deg_formatter))
 
     # ---- Slant range ----
     axs[2].plot(t, slant_range, color="C1")
@@ -149,18 +195,28 @@ def _plot_geometry(t: np.ndarray, bearing: np.ndarray, heading: np.ndarray, slan
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate figure-8 ground-truth plots.")
+    parser = argparse.ArgumentParser(description="Generate ground-truth plots.")
+    parser.add_argument("--trajectory", type=str, default="figure_8",
+                        choices=[tt.value for tt in TrajectoryType],
+                        help="Type of trajectory to generate (default: figure_8)")
     parser.add_argument("--duration", type=float, default=300.0)
     parser.add_argument("--dt", type=float, default=0.01)
-    parser.add_argument("--out-dir", type=str, default="plots/gt_300s_fig8_unwrapped")
+    # parser.add_argument("--out-dir", type=str, default="plots//gt_300s_figure_8")
     parser.add_argument("--show", action="store_true")
     args = parser.parse_args()
 
+    if args.trajectory == "figure_8":
+        traj_type = TrajectoryType.FIGURE_8
+    elif args.trajectory == "linear_turns":
+        traj_type = TrajectoryType.LINEAR_TURNS
+    else:
+        raise ValueError(f"Invalid trajectory type: {args.trajectory}")
     asv_tseq, rov_tseq, _ = generate_trajectories(
         duration=args.duration,
         dt=args.dt,
-        trajectory_type=TrajectoryType.FIGURE_8,
+        trajectory_type=traj_type,
     )
+    out_dir = Path(f"plots/{traj_type.value}/gt_{int(args.duration)}s_360deg")
 
     t = _extract_times(asv_tseq)
     asv_pos = _extract_positions(asv_tseq)
@@ -173,7 +229,7 @@ def main():
 
     slant_range = np.linalg.norm(d, axis=1)
 
-    out_dir = Path(args.out_dir)
+    # out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     traj_path = out_dir / "sim_trajectories.svg"
     geom_path = out_dir / "sim_geometry.svg"

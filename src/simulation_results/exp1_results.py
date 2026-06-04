@@ -1,4 +1,4 @@
-# scripts/exp1_cv_tuning_pipeline.py
+# scripts/exp1_results.py
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ TDMA_FREQ      = 0.2  # 1 msg / 5 s
 SIGMA_VALUES = [0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 1.0]
 
 def main():
-    outdir = Path("results2/exp1_cv")
+    outdir = Path(f"results/{TRAJECTORY_TYPE.value}/exp1_cv")
     outdir.mkdir(parents=True, exist_ok=True)
 
     results = []

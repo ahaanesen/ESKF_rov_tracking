@@ -30,6 +30,7 @@ class ExperimentResult:
     sigma_a: float | None = None
     tdma_interval: float | None = None
     init_range_scale: float | None = None
+    packet_loss_prob: float | None = None
 
     run_idx: int = 0
 
@@ -55,6 +56,7 @@ def _results_from_statistics(
     sigma_a: float | None,
     tdma_interval: float | None,
     init_range_scale: float | None,
+    packet_loss_prob: float | None,
     run_idx: int,
     divergence_threshold: float,
 ) -> list[ExperimentResult]:
@@ -79,6 +81,7 @@ def _results_from_statistics(
                 sigma_a=sigma_a,
                 tdma_interval=tdma_interval,
                 init_range_scale=init_range_scale,
+                packet_loss_prob=packet_loss_prob,
                 run_idx=run_idx,
                 rmse=rmse,
                 ate=rmse,
@@ -98,6 +101,7 @@ def extract_eskf_result(
     estimator: str = "ESKF",
     sigma_a: float = None,
     tdma_interval: float = None,
+    packet_loss_prob: float = None,
     init_range_scale: float = None,
     run_idx: int = 0,
     divergence_threshold: float = 10.0,
@@ -114,6 +118,7 @@ def extract_eskf_result(
         sigma_a=sigma_a,
         tdma_interval=tdma_interval,
         init_range_scale=init_range_scale,
+        packet_loss_prob=packet_loss_prob,
         run_idx=run_idx,
         divergence_threshold=divergence_threshold,
     )

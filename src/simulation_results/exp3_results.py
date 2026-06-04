@@ -1,4 +1,4 @@
-# scripts/exp1_cv_tuning_pipeline.py
+# scripts/exp3_results.py
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ from simulation_results.eskf_experiments import (  # rename to your actual modul
     save_figures,
 )
 
-TRAJECTORY_TYPE = TrajectoryType.FIGURE_8
+TRAJECTORY_TYPE = TrajectoryType.LINEAR_TURNS
 
 ACOUSTIC_DELAY = True
 JITTER_STD     = 0.0
@@ -43,19 +43,20 @@ MISS_PROB      = 0.0
 SOUND_SPEED    = 1500.0
 #TDMA_FREQ      = 0.2  # 1 msg / 5 s
 
-TRUE_RANGE = np.sqrt(269)  # pre-computed true range for this scenario
+# TRUE_RANGE = np.sqrt(269)  # pre-computed true range for this scenario
+TRUE_RANGE = 223.75 # for linear turns, pre-computed true range is slightly different due to different trajectory geometry
 
 TDMA_SLOT_LENGTHS = [5.0, 10.0, 20.0, 30.0, 60.0, 120.0]
 
 # TDMA_SLOT_LENGTHS = [5.0, 10.0, 20.0]
 
 def main():
-    outdir = Path("results2/exp3_tdma")
+    outdir = Path(f"results/{TRAJECTORY_TYPE.value}/exp3_tdma")
     outdir.mkdir(parents=True, exist_ok=True)
 
     results = []
 
-    traj_name = TrajectoryType.FIGURE_8.value
+    traj_name = TRAJECTORY_TYPE.value
 
     imu_sim = eskf_sim.modelImuAsv
     gnss_sim = eskf_sim.sensorGnssAsv
