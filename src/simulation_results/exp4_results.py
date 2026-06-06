@@ -32,7 +32,7 @@ from simulation_results.eskf_experiments import (  # rename to your actual modul
     save_results_csv,
 )
 
-TRAJECTORY_TYPE = TrajectoryType.FIGURE_8  # or TrajectoryType.LINEAR_TURNS
+TRAJECTORY_TYPE = TrajectoryType.LINEAR_TURNS  # or TrajectoryType.LINEAR_TURNS
 
 ACOUSTIC_DELAY = True
 JITTER_STD     = 0.0
@@ -83,19 +83,19 @@ def main():
         lever_arm=gnss_sim.lever_arm,
         rate_hz=1.0,
     )
-    np.random.seed(SEED)
+    # np.random.seed(SEED)
 
     for packet_loss_prob in PACKET_LOSS_PROB:
         packet_mask = gen.generate_acoustic_packet_mask(
-            rate_hz=1.0,
-            miss_prob=0.10,
+            rate_hz=0.2,
+            miss_prob=packet_loss_prob,
             loss_seed=42,
         )
         
         z_usbl_tseq = gen.generate_usbl(
             std_rad=usbl_sim.usbl_std,
             lever_arm=usbl_sim.lever_arm,
-            rate_hz=1/TDMA_FREQ,
+            rate_hz=TDMA_FREQ,
             acoustic_delay=ACOUSTIC_DELAY,
             jitter_std=JITTER_STD,
             packet_mask=packet_mask,
@@ -104,7 +104,7 @@ def main():
         z_range_tseq = gen.generate_range(
             std_m=range_sim.range_std,
             lever_arm=range_sim.lever_arm,
-            rate_hz=1/TDMA_FREQ,
+            rate_hz=TDMA_FREQ,
             acoustic_delay=ACOUSTIC_DELAY,
             jitter_std=JITTER_STD,
             packet_mask=packet_mask,
@@ -112,7 +112,7 @@ def main():
         )
         z_depth_tseq = gen.generate_depth(
             std_m=depth_sim.depth_std,
-            rate_hz=1/TDMA_FREQ,
+            rate_hz=TDMA_FREQ,
             packet_mask=packet_mask,
         )
 

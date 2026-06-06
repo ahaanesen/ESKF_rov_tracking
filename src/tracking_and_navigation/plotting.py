@@ -11,6 +11,14 @@ from matplotlib import pyplot as plt
 from scipy.stats import chi2
 from scipy.stats import chi2
 
+plt.rcParams.update(
+    {
+        "font.family": "serif",
+        "font.serif": ["CMU Serif", "Computer Modern", "cmr10", "DejaVu Serif"],
+        "mathtext.fontset": "cm",
+    }
+)
+
 from senfuslib import TimeSequence
 
 from tracking_and_navigation.states import (
@@ -217,7 +225,7 @@ class PlotterESKFJoint:
         if self.x_upds is None or self.rov_gt is None:
             return None
 
-        fig, axs = plt.subplots(2, 1, figsize=(10, 6), sharex=False)
+        fig, axs = plt.subplots(2, 1, figsize=(7.5, 7.5), sharex=False)
 
         gt_t = np.asarray(self.rov_gt.times)
         est_t = np.asarray(self.x_upds.times)
@@ -234,20 +242,20 @@ class PlotterESKFJoint:
         rmse_pos, _ = _rmse(gt_pos, est_pos_i)
         rmse_vel, _ = _rmse(gt_vel, est_vel_i)
 
-        axs[0].plot(gt_t, rmse_pos, label="ROV pos RMSE", color="C0")
+        axs[0].plot(gt_t, rmse_pos, label="UUV pos RMSE", color="C0")
         axs[0].set_ylabel("RMSE [m]")
-        axs[0].set_title("ROV Position RMSE")
+        axs[0].set_title("UUV Position RMSE")
         axs[0].grid(True)
         axs[0].legend()
 
-        axs[1].plot(gt_t, rmse_vel, label="ROV vel RMSE", color="C1")
+        axs[1].plot(gt_t, rmse_vel, label="UUV vel RMSE", color="C1")
         axs[1].set_ylabel("RMSE [m/s]")
         axs[1].set_xlabel("Time [s]")
-        axs[1].set_title("ROV Velocity RMSE")
+        axs[1].set_title("UUV Velocity RMSE")
         axs[1].grid(True)
         axs[1].legend()
 
-        fig.suptitle(f"ESKF RMSE — ROV — {self.scenario_name}")
+        fig.suptitle(f"ESKF RMSE — UUV — {self.scenario_name}")
         fig.tight_layout()
         return fig
 

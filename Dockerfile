@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-colcon-common-extensions \
     python3-numpy \
+    python3-pandas \
     ros-humble-rclpy \
     ros-humble-rosidl-runtime-py \
     ros-humble-rosbag2-py \
@@ -30,8 +31,7 @@ RUN pip3 install --no-cache-dir \
     scipy \    
     matplotlib \    
     tqdm \
-    scipy \
-    pandas
+    scipy
 
 # Workspace
 WORKDIR /ws

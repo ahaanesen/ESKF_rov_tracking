@@ -129,26 +129,6 @@ def _chi2_95_interval_3dof() -> tuple[float, float]:
         return 0.072, 3.116
 
 
-# def _plot_metric(ax, rows: list[dict], vehicle: str, metric: str, ylabel: str) -> None:
-#     marker_map = {"ESKF": "o", "FGO": "s"}
-#     for estimator in ESTIMATOR_ORDER:
-#         for scenario in SCENARIO_LABELS:
-#             series = [r for r in rows if r["vehicle"] == vehicle and r["estimator"] == estimator and r["scenario"] == scenario]
-#             if not series:
-#                 continue
-#             series = sorted(series, key=lambda r: r["sigma_a"])
-#             sigmas = [r["sigma_a"] for r in series]
-#             values = [r[metric] for r in series]
-#             label = f"{estimator} {scenario}"
-#             ax.plot(sigmas, values, marker=marker_map.get(estimator, "o"), label=label)
-
-#     # ax.set_xlabel("sigma_a")
-#     ax.set_xlabel(r"$\sigma_a$")
-#     ax.set_ylabel(ylabel)
-#     ax.set_xscale("log")
-#     ax.set_yscale("log")
-#     ax.set_title(vehicle)
-#     ax.grid(True, linestyle="--", alpha=0.4)
 def _plot_metric(ax, rows: list[dict], vehicle: str, metric: str, ylabel: str) -> None:
     marker_map = {"ESKF": "o", "FGO": "s"}
 

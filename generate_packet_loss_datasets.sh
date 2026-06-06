@@ -30,7 +30,6 @@ export PYTHONPATH=src:$PYTHONPATH
 for LOSS in 0.0 0.1 0.3 0.5 0.7 0.9; do
 
     # SAFE rate computation
-    RATE=$(awk "BEGIN {print 1.0 / ${LOSS}}")
 
     LOSS_NAME=$(echo ${LOSS} | sed "s/\./p/g")
     OUT_DIR="'"${BASE_OUT}"'_loss_${LOSS_NAME}"

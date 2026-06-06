@@ -13,6 +13,7 @@ import math
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FuncFormatter
+from exp1_plots import TrajectoryType  # reuse the same TrajectoryType enum
 
 # plt.rcParams.update(
 #     {

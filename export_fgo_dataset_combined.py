@@ -201,83 +201,6 @@ class Event:
 
 
 # ----------------------------
-# Joint packet-loss mask
-# ----------------------------
-
-
-def apply_joint_rov_loss(
-    usbl_pairs: List[Tuple[float, object]],
-    range_pairs: List[Tuple[float, object]],
-    depth_pairs: List[Tuple[float, object]],
-    miss_prob: float,
-    rng: np.random.Generator,
-) -> Tuple[
-    List[Tuple[float, object]],
-    List[Tuple[float, object]],
-    List[Tuple[float, object]],
-]:
-    """
-    Apply a single Bernoulli(miss_prob) draw per TDMA slot so that USBL,
-    range, and depth measurements are either all present or all absent in
-    each slot.  The three sequences are assumed to be co-timed (same nominal
-    slot times) because they share the same rate and are generated from the
-    same seed.
-
-    The USBL sequence defines the set of slot times.  For each USBL slot the
-    nearest range and depth samples are found and either all three are kept
-    or all three are discarded.  Samples in range/depth that do not correspond
-    to any USBL slot are kept (e.g. if rates differ), though for this study
-    all three rates are equal so this case does not arise.
-
-    Returns the filtered (usbl, range, depth) pair lists.
-    """
-    if miss_prob <= 0.0:
-        return usbl_pairs, range_pairs, depth_pairs
-
-    n_slots = len(usbl_pairs)
-    # One draw per slot — True means the packet is LOST.
-    lost = rng.random(n_slots) < miss_prob
-
-    # Build index sets of range and depth samples that survive.
-    range_times = np.array([t for t, _ in range_pairs], dtype=float)
-    depth_times = np.array([t for t, _ in depth_pairs], dtype=float)
-
-    # Track which range/depth indices have been suppressed.
-    range_suppressed = set()
-    depth_suppressed = set()
-
-    filtered_usbl: List[Tuple[float, object]] = []
-
-    for slot_idx, (t_usbl, z_usbl) in enumerate(usbl_pairs):
-        if lost[slot_idx]:
-            # Find nearest range and depth samples for this slot and suppress them.
-            if len(range_times) > 0:
-                r_idx = int(np.argmin(np.abs(range_times - t_usbl)))
-                range_suppressed.add(r_idx)
-            if len(depth_times) > 0:
-                d_idx = int(np.argmin(np.abs(depth_times - t_usbl)))
-                depth_suppressed.add(d_idx)
-            # Drop the USBL measurement for this slot.
-        else:
-            filtered_usbl.append((t_usbl, z_usbl))
-
-    filtered_range = [
-        (t, z) for i, (t, z) in enumerate(range_pairs) if i not in range_suppressed
-    ]
-    filtered_depth = [
-        (t, z) for i, (t, z) in enumerate(depth_pairs) if i not in depth_suppressed
-    ]
-
-    n_lost = int(lost.sum())
-    print(
-        f"[INFO] Joint packet-loss: {n_lost}/{n_slots} slots dropped "
-        f"(p={miss_prob:.2f}, actual={n_lost/max(n_slots,1):.3f})"
-    )
-
-    return filtered_usbl, filtered_range, filtered_depth
-
-
-# ----------------------------
 # Ground-truth CSV export
 # ----------------------------
 
@@ -337,7 +260,6 @@ def write_ground_truth_csvs(out_dir: str, asv_tseq, rov_tseq, args) -> None:
                 ]
             )
 
-    joint = str2bool(args.joint_rov_packet_loss) if hasattr(args, "joint_rov_packet_loss") else False
     with open(meta_json, "w") as f:
         json.dump(
             {
@@ -359,7 +281,6 @@ def write_ground_truth_csvs(out_dir: str, asv_tseq, rov_tseq, args) -> None:
                     "usbl_miss_prob": args.usbl_miss_prob,
                     "range_miss_prob": args.range_miss_prob,
                     "depth_miss_prob": args.depth_miss_prob,
-                    "joint_rov_packet_loss": joint,
                     "sound_speed_mps": args.sound_speed,
                 },
                 "timestamp_alignment": {
@@ -388,7 +309,6 @@ def write_ground_truth_csvs(out_dir: str, asv_tseq, rov_tseq, args) -> None:
 
 def write_rosbag(out_dir: str, asv_gt, rov_gt, args) -> None:
     write_acoustic = str2bool(args.write_acoustic_rx)
-    joint_loss = str2bool(args.joint_rov_packet_loss) if hasattr(args, "joint_rov_packet_loss") else False
 
     # Dynamic message classes avoid hard dependency at import time.
     imu_msg     = get_message("sensor_msgs/msg/Imu")
@@ -397,6 +317,12 @@ def write_rosbag(out_dir: str, asv_gt, rov_gt, args) -> None:
     acoustic_msg = get_message("blueboat_interfaces/msg/AcousticCommReceive")
 
     mg = MeasurementGenerator(asv_gt, rov_gt)
+    # ✅ Use identical packet mask as ESKF
+    packet_mask = mg.generate_acoustic_packet_mask(
+        rate_hz=args.usbl_rate,
+        miss_prob=args.usbl_miss_prob,
+        loss_seed=args.seed,   # critical for determinism
+    )
 
     gnss_lever_arm = np.array([0.3, 0.3, 0.1], dtype=float)
     lever_arm      = np.array([0.0, 0.0, 1.2], dtype=float)
@@ -414,78 +340,36 @@ def write_rosbag(out_dir: str, asv_gt, rov_gt, args) -> None:
     )
     acoustic_delay = str2bool(args.acoustic_delay)
 
-    if joint_loss:
-        # Generate all three ROV sequences WITHOUT per-channel loss, then
-        # apply a single shared Bernoulli mask so that all three are either
-        # present or absent in every TDMA slot.  The miss_prob used for the
-        # shared draw comes from usbl_miss_prob; the three values must be
-        # equal when joint loss is active (enforced in parse_args validation).
-        usbl_seq  = mg.generate_usbl(
-            std_rad=args.usbl_std_rad,
-            lever_arm=lever_arm,
-            rate_hz=args.usbl_rate,
-            acoustic_delay=acoustic_delay,
-            jitter_std=args.acoustic_jitter_std,
-            miss_prob=0.0,          # loss applied jointly below
-            sound_speed=args.sound_speed,
-        )
-        range_seq = mg.generate_range(
-            std_m=args.range_std_m,
-            lever_arm=lever_arm,
-            rate_hz=args.range_rate,
-            acoustic_delay=acoustic_delay,
-            jitter_std=args.acoustic_jitter_std,
-            miss_prob=0.0,          # loss applied jointly below
-            sound_speed=args.sound_speed,
-        )
-        depth_seq = mg.generate_depth(
-            std_m=args.depth_std_m,
-            rate_hz=args.depth_rate,
-            miss_prob=0.0,          # loss applied jointly below
-        )
 
-        usbl_pairs  = as_pairs(usbl_seq)
-        range_pairs = as_pairs(range_seq)
-        depth_pairs = as_pairs(depth_seq)
+    usbl_seq = mg.generate_usbl(
+        std_rad=args.usbl_std_rad,
+        lever_arm=lever_arm,
+        rate_hz=args.usbl_rate,
+        acoustic_delay=acoustic_delay,
+        jitter_std=args.acoustic_jitter_std,
+        packet_mask=packet_mask,
+        sound_speed=args.sound_speed,
+    )
 
-        # Use a separate RNG seeded deterministically from args.seed so that
-        # the loss pattern is reproducible but independent of the measurement
-        # noise draws made inside MeasurementGenerator.
-        loss_rng = np.random.default_rng(args.seed + 100_000)
-        usbl_pairs, range_pairs, depth_pairs = apply_joint_rov_loss(
-            usbl_pairs, range_pairs, depth_pairs,
-            miss_prob=args.usbl_miss_prob,
-            rng=loss_rng,
-        )
-    else:
-        # Original independent per-channel loss behaviour.
-        usbl_seq  = mg.generate_usbl(
-            std_rad=args.usbl_std_rad,
-            lever_arm=lever_arm,
-            rate_hz=args.usbl_rate,
-            acoustic_delay=acoustic_delay,
-            jitter_std=args.acoustic_jitter_std,
-            miss_prob=args.usbl_miss_prob,
-            sound_speed=args.sound_speed,
-        )
-        range_seq = mg.generate_range(
-            std_m=args.range_std_m,
-            lever_arm=lever_arm,
-            rate_hz=args.range_rate,
-            acoustic_delay=acoustic_delay,
-            jitter_std=args.acoustic_jitter_std,
-            miss_prob=args.range_miss_prob,
-            sound_speed=args.sound_speed,
-        )
-        depth_seq = mg.generate_depth(
-            std_m=args.depth_std_m,
-            rate_hz=args.depth_rate,
-            miss_prob=args.depth_miss_prob,
-        )
+    range_seq = mg.generate_range(
+        std_m=args.range_std_m,
+        lever_arm=lever_arm,
+        rate_hz=args.range_rate,
+        acoustic_delay=acoustic_delay,
+        jitter_std=args.acoustic_jitter_std,
+        packet_mask=packet_mask,
+        sound_speed=args.sound_speed,
+    )
 
-        usbl_pairs  = as_pairs(usbl_seq)
-        range_pairs = as_pairs(range_seq)
-        depth_pairs = as_pairs(depth_seq)
+    depth_seq = mg.generate_depth(
+        std_m=args.depth_std_m,
+        rate_hz=args.depth_rate,
+        packet_mask=packet_mask,
+    )
+
+    usbl_pairs  = as_pairs(usbl_seq)
+    range_pairs = as_pairs(range_seq)
+    depth_pairs = as_pairs(depth_seq)
 
     imu_pairs  = as_pairs(imu_seq)
     gnss_pairs = as_pairs(gnss_seq)
@@ -756,17 +640,6 @@ def parse_args():
     parser.add_argument("--topic-acoustic", type=str, default="microampere/acoustic/receive")
 
     args = parser.parse_args()
-
-    # Validate joint-loss consistency: all three miss probs must agree.
-    if args.joint_rov_packet_loss:
-        probs = {args.usbl_miss_prob, args.range_miss_prob, args.depth_miss_prob}
-        if len(probs) != 1:
-            parser.error(
-                "--joint-rov-packet-loss requires --usbl-miss-prob, "
-                "--range-miss-prob, and --depth-miss-prob to be equal. "
-                f"Got: usbl={args.usbl_miss_prob}, range={args.range_miss_prob}, "
-                f"depth={args.depth_miss_prob}."
-            )
 
     return args
 
