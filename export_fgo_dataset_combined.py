@@ -16,11 +16,11 @@ The resulting folder has the structure expected by the other ROS 2 node, e.g.:
 Usage example:
 
 PYTHONPATH=src:$PYTHONPATH python3 export_fgo_dataset_combined.py \
-    --out /tmp/figure8_delay_no_loss_tdma \
+    --out /tmp/linear_delay_no_loss_tdma \
     --duration 300 \
     --dt 0.01 \
     --seed 42 \
-    --trajectory-type figure_8 \
+    --trajectory-type linear_turns \
     --rov-id 1 \
     --epoch-sec 1700000000 \
     --datum-lat 60.3913 \

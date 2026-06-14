@@ -4,7 +4,7 @@ set -e
 
 CONTAINER_NAME="eskf_humble"
 IMAGE_NAME="eskf-humble:latest"
-BASE_OUT="/tmp/linear_turns_delay_tdma_loss"
+BASE_OUT="/tmp/figure8_delay_tdma_loss"
 
 PACKET_LOSS_PROB=(0.0 0.1 0.3 0.5 0.7 0.9)
 # echo "🔧 Building Docker image..."
@@ -27,7 +27,8 @@ cd /ws/src/ESKF_rov_tracking
 
 export PYTHONPATH=src:$PYTHONPATH
 
-for LOSS in 0.0 0.1 0.3 0.5 0.7 0.9; do
+#for LOSS in 0.0 0.1 0.3 0.5 0.7 0.9; do
+for LOSS in 0.0; do
 
     # SAFE rate computation
 
@@ -43,7 +44,7 @@ for LOSS in 0.0 0.1 0.3 0.5 0.7 0.9; do
         --duration 300 \
         --dt 0.01 \
         --seed 42 \
-        --trajectory-type linear_turns \
+        --trajectory-type figure_8 \
         --rov-id 1 \
         --epoch-sec 1700000000 \
         --datum-lat 60.3913 \
@@ -67,10 +68,11 @@ echo "✅ Done inside container."
 
 echo "📦 Copying datasets..."
 
-mkdir -p ./datasets
+mkdir -p ./datasets2
 
-for LOSS in 0p0 0p1 0p3 0p5 0p7 0p9; do
-    docker cp ${CONTAINER_NAME}:${BASE_OUT}_loss_${LOSS} ./datasets/
+#for LOSS in 0p0 0p1 0p3 0p5 0p7 0p9; do
+for LOSS in 0p0; do
+    docker cp ${CONTAINER_NAME}:${BASE_OUT}_loss_${LOSS} ./datasets2/
 done
 
 echo "✅ Done"

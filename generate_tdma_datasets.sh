@@ -4,7 +4,9 @@ set -e
 
 CONTAINER_NAME="eskf_humble"
 IMAGE_NAME="eskf-humble:latest"
-BASE_OUT="/tmp/linear_turns_delay_no_loss_tdma"
+TRAJECTORY_TYPE="linear_turns"
+LOCAL_OUT_DIR="./datasets2"
+BASE_OUT="/tmp/${TRAJECTORY_TYPE}_delay_no_loss_tdma2"
 
 TDMA_SLOT_LENGTHS=(5.0 10.0 20.0 30.0 60.0 120.0)
 
@@ -45,7 +47,7 @@ for SLOT in 5.0 10.0 20.0 30.0 60.0 120.0; do
         --duration 300 \
         --dt 0.01 \
         --seed 42 \
-        --trajectory-type linear_turns \
+        --trajectory-type "'"${TRAJECTORY_TYPE}"'" \
         --rov-id 1 \
         --epoch-sec 1700000000 \
         --datum-lat 60.3913 \
@@ -62,6 +64,8 @@ for SLOT in 5.0 10.0 20.0 30.0 60.0 120.0; do
         --depth-miss-prob 0.0 \
         --overwrite
 
+    grep -q "\"trajectory_type\": \"'"${TRAJECTORY_TYPE}"'\"" "${OUT_DIR}/gt_metadata.json"
+
 done
 
 echo "✅ Done inside container."
@@ -69,10 +73,12 @@ echo "✅ Done inside container."
 
 echo "📦 Copying datasets..."
 
-mkdir -p ./datasets
+mkdir -p "${LOCAL_OUT_DIR}"
 
 for SLOT in 5p0 10p0 20p0 30p0 60p0 120p0; do
-    docker cp ${CONTAINER_NAME}:${BASE_OUT}_slot_${SLOT} ./datasets/
+    LOCAL_DATASET="${LOCAL_OUT_DIR}/$(basename "${BASE_OUT}")_slot_${SLOT}"
+    rm -rf "${LOCAL_DATASET}"
+    docker cp ${CONTAINER_NAME}:${BASE_OUT}_slot_${SLOT} "${LOCAL_OUT_DIR}/"
 done
 
 echo "✅ Done"

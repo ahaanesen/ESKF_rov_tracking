@@ -60,17 +60,17 @@ def _interp(t_src: np.ndarray, x_src: np.ndarray, t_tgt: np.ndarray) -> np.ndarr
     return x_i
 
 
-def _rmse(gt: np.ndarray, est: np.ndarray):
+def _error_norm(gt: np.ndarray, est: np.ndarray):
     """
-    Per-time-step RMSE across components.
+    Per-time-step Euclidean error norm across components.
     gt, est: (N, d)
     returns:
-      rmse: (N,)
+      norm: (N,)
       err:  (N, d)
     """
     err = est - gt
-    rmse = np.sqrt(np.mean(err**2, axis=1))
-    return rmse, err
+    norm = np.linalg.norm(err, axis=1)
+    return norm, err
 
 
 def _path_length(xyz: np.ndarray) -> float:
@@ -239,8 +239,8 @@ class PlotterESKFJoint:
         est_pos_i = _interp(est_t, est_pos, gt_t)
         est_vel_i = _interp(est_t, est_vel, gt_t)
 
-        rmse_pos, _ = _rmse(gt_pos, est_pos_i)
-        rmse_vel, _ = _rmse(gt_vel, est_vel_i)
+        rmse_pos, _ = _error_norm(gt_pos, est_pos_i)
+        rmse_vel, _ = _error_norm(gt_vel, est_vel_i)
 
         axs[0].plot(gt_t, rmse_pos, label="UUV pos RMSE", color="C0")
         axs[0].set_ylabel("RMSE [m]")
@@ -277,8 +277,8 @@ class PlotterESKFJoint:
         est_pos_i = _interp(est_t, est_pos, gt_t)
         est_vel_i = _interp(est_t, est_vel, gt_t)
 
-        rmse_pos, _ = _rmse(gt_pos, est_pos_i)
-        rmse_vel, _ = _rmse(gt_vel, est_vel_i)
+        rmse_pos, _ = _error_norm(gt_pos, est_pos_i)
+        rmse_vel, _ = _error_norm(gt_vel, est_vel_i)
 
         axs[0].plot(gt_t, rmse_pos, label="ASV pos RMSE", color="C3")
         axs[0].set_ylabel("RMSE [m]")

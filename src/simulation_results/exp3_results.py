@@ -51,7 +51,7 @@ TDMA_SLOT_LENGTHS = [5.0, 10.0, 20.0, 30.0, 60.0, 120.0]
 # TDMA_SLOT_LENGTHS = [5.0, 10.0, 20.0]
 
 def main():
-    outdir = Path(f"results/{TRAJECTORY_TYPE.value}/exp3_tdma")
+    outdir = Path(f"results/{TRAJECTORY_TYPE.value}/exp3_tdma_new")
     outdir.mkdir(parents=True, exist_ok=True)
 
     results = []
@@ -83,6 +83,11 @@ def main():
         lever_arm=gnss_sim.lever_arm,
         rate_hz=1.0,
     )
+    packet_mask = gen.generate_acoustic_packet_mask(
+        rate_hz=0.2,
+        miss_prob=0.0,
+        loss_seed=42,
+    )
 
     for tdma_slot_length in TDMA_SLOT_LENGTHS:
         z_usbl_tseq = gen.generate_usbl(
@@ -91,7 +96,7 @@ def main():
             rate_hz=1/tdma_slot_length,
             acoustic_delay=ACOUSTIC_DELAY,
             jitter_std=JITTER_STD,
-            miss_prob=MISS_PROB,
+            packet_mask=packet_mask,
             sound_speed=SOUND_SPEED,
         )
         z_range_tseq = gen.generate_range(
@@ -100,13 +105,13 @@ def main():
             rate_hz=1/tdma_slot_length,
             acoustic_delay=ACOUSTIC_DELAY,
             jitter_std=JITTER_STD,
-            miss_prob=MISS_PROB,
+            packet_mask=packet_mask,
             sound_speed=SOUND_SPEED,
         )
         z_depth_tseq = gen.generate_depth(
             std_m=depth_sim.depth_std,
             rate_hz=1/tdma_slot_length,
-            miss_prob=0.0,
+            packet_mask=packet_mask,
         )
 
         print(f"[exp3] Running tdma slot length = {tdma_slot_length:.3f}")
